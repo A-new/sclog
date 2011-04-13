@@ -1083,8 +1083,9 @@ FARPROC __stdcall My_GetProcAddress(HMODULE a0,LPCSTR a1)
 
 void usage(void){
 	printf("           Generic Shellcode Logger v0.1c BETA\r\n");
-	printf(" Author David Zimmer <david@idefense.com, dzzie@yahoo.com>\r\n");
-	printf(" Uses the GPL Asm/Dsm Engines from OllyDbg (C) 2001 Oleh Yuschuk\r\n\r\n");
+	printf(" Author David Zimmer <dzzie@yahoo.com> Developed @ iDefense.com\r\n");
+	printf(" Uses the GPL Asm/Dsm Engines from OllyDbg (C) 2001 Oleh Yuschuk\r\n");
+	printf("      ---- Compilation date: %s %s ----\r\n\r\n", __DATE__, __TIME__);
 
 	SetConsoleTextAttribute(STDOUT,  0x0F); //white
 	
@@ -1105,7 +1106,8 @@ void usage(void){
 	printf("    /log <file> \tWrite all output to logfile\r\n"); 
 	printf("    /dll <dllfile> \tCalls LoadLibrary on <dllfile> to add to memory map\r\n"); 
 	printf("    /foff hexnum \tStarts execution at file offset\r\n"); 
-	printf("    /hooks \tshows implemented hooks\r\n\r\n"); 
+	printf("    /va  \t\t0xBase-0xSize  VirtualAlloc memory at 0xBase of 0xSize\r\n"); 
+	printf("    /hooks \t\tshows implemented hooks\r\n\r\n"); 
 
 	SetConsoleTextAttribute(STDOUT,  0x07); //default gray
 	
@@ -1195,6 +1197,32 @@ void main(int argc, char **argv){
 			}
 			int hh = (int)LoadLibrary(argv[i+1]);
 			printf("LoadLibrary(%s) = 0x%x\n", argv[i+1], hh);
+		}
+
+		if(strstr(argv[i],"/va") > 0 ){
+			if(i+1 >= argc){
+				printf("Invalid option /va must specify 0xBase-0xSize as next arg\n");
+				exit(0);
+			}
+		    char *ag = strdup(argv[i+1]);
+			char *sz;
+			unsigned int size=0;
+			unsigned int base=0;
+			if (( sz = strstr(ag, "-")) != NULL)
+			{
+				*sz = '\0';
+				sz++;
+				size = strtol(sz, NULL, 16);
+				base = strtol(ag, NULL, 16);
+				int r = (int)VirtualAlloc((void*)base, size, MEM_RESERVE | MEM_COMMIT, 0x40 );
+				printf("VirtualAlloc(base=%x, size=%x) = %x - %x\n", base, size, r, r+size);
+				if(r==0){ printf("ErrorCode: %x\nAborting...\n", GetLastError()); exit(0);}
+				//0x57 = ERROR_INVALID_PARAMETER 
+
+			}else{
+				printf("Invalid option /va must specify 0xBase-0xSize as next arg\n");
+				exit(0);
+			}
 		}
 
 	}
@@ -1329,7 +1357,7 @@ void DoHook(void* real, void* hook, void* thunk, char* name){
 		printf("\t%s\r\n",name);
 		hook_count++;
 	}else{
-		if ( !InstallHook( real, hook, thunk) ){ //try to install the real hook here
+		if ( !InstallHook( real, hook, thunk, 0) ){ //try to install the real hook here
 			infomsg("Install %s hook failed...Error: %s\r\n", name, &lastError);
 			ExitProcess(0);
 		}
@@ -1384,7 +1412,7 @@ void InstallHooks(void)
 	//ADDHOOK(URLDownloadToFileA);
 
 	void* real = GetProcAddress( GetModuleHandle("urlmon.dll"), "URLDownloadToFileA");
-	if ( !InstallHook( real, My_URLDownloadToFileA, Real_URLDownloadToFileA) ){ 
+	if ( !InstallHook( real, My_URLDownloadToFileA, Real_URLDownloadToFileA,0) ){ 
 		infomsg("Install hook URLDownloadToFileA failed...Error: \r\n");
 		ExitProcess(0);
 	}
@@ -1402,7 +1430,7 @@ void InstallHooks(void)
 	//ADDHOOK(URLDownloadToCacheFile);
 
 	real = GetProcAddress( GetModuleHandle("urlmon.dll"), "URLDownloadToCacheFileA");
-	if ( !InstallHook( real, My_URLDownloadToCacheFile, Real_URLDownloadToCacheFile) ){ 
+	if ( !InstallHook( real, My_URLDownloadToCacheFile, Real_URLDownloadToCacheFile,0) ){ 
 		infomsg("Install hook URLDownloadToCacheFile failed...Error: \r\n");
 		ExitProcess(0);
 	}
