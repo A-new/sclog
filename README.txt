@@ -1,13 +1,16 @@
 
-sclog is a GPL shellcode analysis project available from iDefense.com
-as part of the Malcode Analyst Pack
-   http://labs.idefense.com/software/malcode.php#more_malcode+analysis+pack
+sclog is a GPL shellcode analysis project that was released 
+in 2005 as part of the Malcode Analyst Pack while I was at iDefense
+
+iDefense is no longer making this download available so I have decided to
+take over support fo the code and post it on github with some additions
+I have made over the years.
+
+The git archive is here:
+   https://github.com/dzzie/sclog
 
 A training video is available here:
-   http://labs.idefense.com/files/labs/releases/sclog_trainer.wmv
-
-As well as its online help page:
-   http://labs.idefense.com/files/labs/releases/previews/map/
+   http://www.youtube.com/watch?v=XBcmC4jYiRI
 
 Initially sclog was developed to handle shellcode exploits
 captured from web pages or network captures. 
