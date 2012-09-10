@@ -29,38 +29,6 @@ License: sclog.exe Copyright (C) 2005 David Zimmer <david@idefense.com, dzzie@ya
          this program; if not, write to the Free Software Foundation, Inc., 59 Temple
          Place, Suite 330, Boston, MA 02111-1307 USA
 
-/* 
- *  MinHook - The Minimalistic API Hooking Library for x64/x86
- *  Copyright (c) 2009 Tsuda Kageyu. 
- *  All rights reserved.
-
- ================================================================================
-Portions of this software are Copyright (c) 2008-2009, Vyacheslav Patkov.
-================================================================================
-/*
- * Hacker Disassembler Engine 32 C
- * Copyright (c) 2008-2009, Vyacheslav Patkov.
- * All rights reserved.
- *
- */
-
-/*
- * Hacker Disassembler Engine 64 C
- * Copyright (c) 2008-2009, Vyacheslav Patkov.
- * All rights reserved.
- *
-  
-
-================================================================================
-Portions of this software are Copyright (c) 2005-2007 Paul Hsieh.
-================================================================================
-/*  A portable stdint.h
- ****************************************************************************
- *  BSD License:
- ****************************************************************************
- *
- *  Copyright (c) 2005-2007 Paul Hsieh
- *  All rights reserved.
 
 
 ChangeLog:
@@ -105,6 +73,8 @@ ChangeLog:
           - removed all inline asm for x64 compatiability
 		  - VirtualAllocEx hook removed, -threadredir option removed..
 
+  9.10.12 - switched to NtCore Hook Engine + diStorm disasm library (speed, mnemonics, less complexity)
+
 */
 
 
@@ -118,7 +88,7 @@ ChangeLog:
 #include <stdlib.h>
 #include <stdarg.h>
 #include <conio.h>
-#include "MinHook.h"
+#include "NtHookEngine.h"
 
 #pragma warning(disable:4996)
 #pragma warning(disable:4018)
@@ -149,6 +119,7 @@ int last_GetSizeFHand = -44;
 int last_fpointer = 0;
 int rep_count=0;
 int hook_count=0;
+int debug=0;
 
 int infoMsgColor = 0x0E;
 char sc_file[MAX_PATH];
@@ -476,8 +447,10 @@ HANDLE __stdcall My_CreateFileA(LPCSTR a0,DWORD a1,DWORD a2,LPSECURITY_ATTRIBUTE
 BOOL __stdcall My_WriteFile(HANDLE a0,LPCVOID a1,DWORD a2,LPDWORD a3,LPOVERLAPPED a4)
 {
     
-	AddAddr( SCOffset() );	
-	LogAPI("WriteFile(h=%x)\r\n", a0);
+	if( (int)a0 != 7 ){ // ignore stdout from rougue printf's..
+		AddAddr( SCOffset() );	
+		LogAPI("WriteFile(h=%x)\r\n", a0);
+	}
 
     BOOL ret = 0;
     try {
@@ -1202,14 +1175,11 @@ void usage(void){
 	SetConsoleTextAttribute(STDOUT,  0x07); //std gray
 
 	printf(" * 3rd party code includes:\r\n");
-	printf(" *   libMinHook - The Minimalistic API Hooking Library for x86/x64\r\n");
-	printf(" *   Copyright (c) 2009 Tsuda Kageyu. All rights reserved.\r\n");
-	//printf(" *\r\n");
-	printf(" *   Hacker Disassembler Engine x86/x64\r\n");
-	printf(" *   Copyright (c) 2008-2009, Vyacheslav Patkov. All rights reserved.\r\n");
-	//printf(" *\r\n");
-	printf(" *   portable stdint.h Copyright (c) 2005-2007 Paul Hsieh. All rights reserved.\r\n");
-
+	printf(" *   NtCore HookEngine - Daniel Pistelli <ntcore@gmail.com>\r\n");
+	printf(" *   http://www.ntcore.com/files/nthookengine.htm\r\n");
+	printf(" *\r\n");
+	printf(" *   GPL diStorm Disassembler Engine x86/x64\r\n");
+	printf(" *   Copyright (C) 2003-2012 Gil Dabah. diStorm at gmail dot com.\r\n");
 	printf("      ---- Compilation date: %s %s ----\r\n\r\n", __DATE__, __TIME__);
 
 	SetConsoleTextAttribute(STDOUT,  0x0F); //white
@@ -1262,14 +1232,18 @@ LONG __stdcall exceptFilter(struct _EXCEPTION_POINTERS* ExceptionInfo){
 	}
 
 	infomsg("   %x Crash!\r\n\r\n", eAdr); 
+	int retLen;
 
-/*	t_disasm td;
 	unsigned int a = (int)ExceptionInfo->ExceptionRecord->ExceptionAddress;
 
 	try{
-		int leng = Disasm((char*)a,16,a,&td,4);
+		char* disasm = GetDisasm(a,&retLen);
 
-		infomsg("  %x  %s\r\n", a, td.result);
+		if(disasm != NULL){
+			infomsg("%s",disasm);
+			free(disasm);
+		}
+
 		LogAPI("  eax %-8x  ", ExceptionInfo->ContextRecord->Eax);
 		LogAPI("ebx %-8x  ", ExceptionInfo->ContextRecord->Ebx);
 		LogAPI("ecx %-8x  ", ExceptionInfo->ContextRecord->Ecx);
@@ -1281,16 +1255,17 @@ LONG __stdcall exceptFilter(struct _EXCEPTION_POINTERS* ExceptionInfo){
 			
 		int inst=1;
 		while(inst < 5){
-			a+=leng;
-			leng = Disasm((char*)a,16,a,&td,4);
-			if(leng < 1) break;
-			infomsg("  %x  %s\r\n", a, td.result);
+			a+=retLen;
+			disasm = GetDisasm(a,&retLen);
+			if(retLen < 1) break;
+			infomsg("%s",disasm);
+			free(disasm);
 			inst++;
 		}
 	}catch(...){
 		infomsg("Could not disasm exception address for display...\n");
 	}
-*/
+ 
 	myAtExit();
 	
 	if(enableDebug==1){
@@ -1325,12 +1300,6 @@ void main(int argc, char **argv){
 	//system("mode con lines=45");
 	printf("\r\n");
 
-	if (MH_Initialize() != MH_OK)
-	{
-		printf("Could not initilize minhook library...");
-		return;
-	}
-
 	STDOUT = GetStdHandle(STD_OUTPUT_HANDLE);
 	STDIN  = GetStdHandle(STD_INPUT_HANDLE);
 
@@ -1350,6 +1319,7 @@ void main(int argc, char **argv){
 		if(strstr(argv[i],"/log") > 0 ){		 handled=1;i++;} //handled latter
 		if(strstr(argv[i],"/fopen") > 0 ){		 handled=1;i++;} //handled latter
 		if(strstr(argv[i],"/addbpx") > 0 ){		 addbpx=1;handled=1;}
+		if(strstr(argv[i],"/debug") > 0 ){		 debug=1;handled=1;}
 		if(strstr(argv[i],"/break") > 0 ){		 addbpx=1;handled=1;}
 		if(strstr(argv[i],"/redir") > 0 ){		 redirect=1;handled=1;}
 		if(strstr(argv[i],"/nonet") > 0 ){		 nonet=1;handled=1;}
@@ -1552,41 +1522,58 @@ void main(int argc, char **argv){
 
 
 
-int lastError=0;
+HMODULE hKernelBase=0;
 //_______________________________________________ install hooks fx 
 
-bool InstallHook( void* real, void* hook, void* thunk){
-
-	lastError = MH_CreateHook(real, hook, reinterpret_cast<void**>(thunk) );  
-	if(lastError!= MH_OK) return false;
-
-	lastError = MH_EnableHook(real);
-	if(lastError!= MH_OK) return false;
-
-	return true;
+bool InstallHook( void* real, void* hook, int* thunk, char* name, enum hookType ht){
+	if( HookFunction((ULONG_PTR) real, (ULONG_PTR)hook, name, ht) ){ 
+		*thunk = (int)GetOriginalFunction((ULONG_PTR) hook);
+		return true;
+	}
+	return false;
 }
 
-void DoHook(void* real, void* hook, void* thunk, char* name){
+void DoHook(void* real, void* hook, int* thunk, char* name){
+
+	void *lpReal = 0;
+    bool worked = false;
 
 	if(showHooks==1){
 		printf("\t%s\r\n",name);
 		hook_count++;
 	}else{
-		if ( !InstallHook( real, hook, thunk)==1 ){ //try to install the real hook here
-			infomsg("Install %s hook failed...Error: %d\r\n", name, lastError);
+		
+		if(hKernelBase != 0){//its Vista+, see if the export exists there if its in both, 
+			lpReal = (void*)GetProcAddress(hKernelBase, name); //k32 is just a forwarder which we cant hook...
+		}
+		
+		if(lpReal == 0) lpReal = real;
+
+		worked = InstallHook( lpReal, hook, thunk, name, ht_jmp5safe ); //hook type is only implemented for x86
+			
+		if( !worked && lastErrorCode == he_cantHook){
+			if(debug) infomsg("Failed to set jmp5safe hook on %s reverting to jmp hook\r\n", name);
+			worked = InstallHook( lpReal, hook, thunk, name, ht_jmp );
+		}
+
+		if(!worked){
+			infomsg("Install %s hook failed...\r\nError: %s\r\n", name, GetHookError());
 			if( Real_ExitProcess == NULL ) ExitProcess(0); else Real_ExitProcess(0);
 		}
+
 	}
 }
 
 
 //Macro wrapper to build DoHook() call
-#define ADDHOOK(name) DoHook( name, My_##name, &Real_##name, #name );
+#define ADDHOOK(name) DoHook( name, My_##name, (int*)&Real_##name, #name );
 
 
 void InstallHooks(void)
 {
  
+	hKernelBase = GetModuleHandle("kernelbase.dll");
+
 	ADDHOOK(LoadLibraryA); 
 	ADDHOOK(WriteFile);
 	ADDHOOK(CreateFileA);
@@ -1628,10 +1615,7 @@ void InstallHooks(void)
 	//ADDHOOK(URLDownloadToFileA);
 
 	void* real = GetProcAddress( GetModuleHandle("urlmon.dll"), "URLDownloadToFileA");
-	if ( !InstallHook( real, My_URLDownloadToFileA, &Real_URLDownloadToFileA) ){ 
-		infomsg("Install hook URLDownloadToFileA failed...Error: \r\n");
-		ExitProcess(0);
-	}
+	DoHook( real, My_URLDownloadToFileA, (int*)&Real_URLDownloadToFileA, "URLDownloadToFileA");
 
 	/*
 	00405CE9   68 84E74100      PUSH 41E784                              
@@ -1646,11 +1630,7 @@ void InstallHooks(void)
 	//ADDHOOK(URLDownloadToCacheFile);
 
 	real = GetProcAddress( GetModuleHandle("urlmon.dll"), "URLDownloadToCacheFileA");
-	if ( !InstallHook( real, My_URLDownloadToCacheFile, &Real_URLDownloadToCacheFile) ){ 
-		infomsg("Install hook URLDownloadToCacheFile failed...Error: \r\n");
-		ExitProcess(0);
-	}
-
+	DoHook( real, My_URLDownloadToCacheFile, (int*)&Real_URLDownloadToCacheFile,"URLDownloadToCacheFileA");
 
 
 	//added 10.1.10
