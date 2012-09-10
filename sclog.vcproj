@@ -93,6 +93,81 @@
 			/>
 		</Configuration>
 		<Configuration
+			Name="Release|Win32"
+			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
+			IntermediateDirectory="$(ConfigurationName)"
+			ConfigurationType="1"
+			CharacterSet="2"
+			WholeProgramOptimization="1"
+			>
+			<Tool
+				Name="VCPreBuildEventTool"
+			/>
+			<Tool
+				Name="VCCustomBuildTool"
+			/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"
+			/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"
+			/>
+			<Tool
+				Name="VCMIDLTool"
+			/>
+			<Tool
+				Name="VCCLCompilerTool"
+				Optimization="0"
+				EnableIntrinsicFunctions="true"
+				WholeProgramOptimization="false"
+				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE"
+				RuntimeLibrary="0"
+				EnableFunctionLevelLinking="true"
+				UsePrecompiledHeader="0"
+				WarningLevel="3"
+				DebugInformationFormat="3"
+			/>
+			<Tool
+				Name="VCManagedResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCPreLinkEventTool"
+			/>
+			<Tool
+				Name="VCLinkerTool"
+				OutputFile="./bin/$(SolutionName).exe"
+				GenerateDebugInformation="true"
+				SubSystem="1"
+				OptimizeReferences="2"
+				EnableCOMDATFolding="2"
+				TargetMachine="1"
+			/>
+			<Tool
+				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
+			/>
+			<Tool
+				Name="VCXDCMakeTool"
+			/>
+			<Tool
+				Name="VCBscMakeTool"
+			/>
+			<Tool
+				Name="VCFxCopTool"
+			/>
+			<Tool
+				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCPostBuildEventTool"
+			/>
+		</Configuration>
+		<Configuration
 			Name="Debug|x64"
 			OutputDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)"
 			IntermediateDirectory="$(PlatformName)\$(ConfigurationName)"
@@ -145,81 +220,6 @@
 				RandomizedBaseAddress="1"
 				DataExecutionPrevention="1"
 				TargetMachine="17"
-			/>
-			<Tool
-				Name="VCALinkTool"
-			/>
-			<Tool
-				Name="VCManifestTool"
-			/>
-			<Tool
-				Name="VCXDCMakeTool"
-			/>
-			<Tool
-				Name="VCBscMakeTool"
-			/>
-			<Tool
-				Name="VCFxCopTool"
-			/>
-			<Tool
-				Name="VCAppVerifierTool"
-			/>
-			<Tool
-				Name="VCPostBuildEventTool"
-			/>
-		</Configuration>
-		<Configuration
-			Name="Release|Win32"
-			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
-			IntermediateDirectory="$(ConfigurationName)"
-			ConfigurationType="1"
-			CharacterSet="2"
-			WholeProgramOptimization="1"
-			>
-			<Tool
-				Name="VCPreBuildEventTool"
-			/>
-			<Tool
-				Name="VCCustomBuildTool"
-			/>
-			<Tool
-				Name="VCXMLDataGeneratorTool"
-			/>
-			<Tool
-				Name="VCWebServiceProxyGeneratorTool"
-			/>
-			<Tool
-				Name="VCMIDLTool"
-			/>
-			<Tool
-				Name="VCCLCompilerTool"
-				Optimization="0"
-				EnableIntrinsicFunctions="true"
-				WholeProgramOptimization="false"
-				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE"
-				RuntimeLibrary="0"
-				EnableFunctionLevelLinking="true"
-				UsePrecompiledHeader="0"
-				WarningLevel="3"
-				DebugInformationFormat="3"
-			/>
-			<Tool
-				Name="VCManagedResourceCompilerTool"
-			/>
-			<Tool
-				Name="VCResourceCompilerTool"
-			/>
-			<Tool
-				Name="VCPreLinkEventTool"
-			/>
-			<Tool
-				Name="VCLinkerTool"
-				OutputFile="./bin/$(SolutionName).exe"
-				GenerateDebugInformation="true"
-				SubSystem="1"
-				OptimizeReferences="2"
-				EnableCOMDATFolding="2"
-				TargetMachine="1"
 			/>
 			<Tool
 				Name="VCALinkTool"
@@ -327,81 +327,93 @@
 	</References>
 	<Files>
 		<Filter
-			Name="libMinHook"
+			Name="distorm3.3"
 			>
 			<File
-				RelativePath=".\libMinHook\buffer.cpp"
+				RelativePath=".\diStorm3.3\config.h"
 				>
 			</File>
 			<File
-				RelativePath=".\libMinHook\buffer.h"
+				RelativePath=".\diStorm3.3\decoder.c"
 				>
 			</File>
 			<File
-				RelativePath=".\libMinHook\export.cpp"
+				RelativePath=".\diStorm3.3\decoder.h"
 				>
 			</File>
 			<File
-				RelativePath=".\libMinHook\hook.cpp"
+				RelativePath=".\diStorm3.3\distorm.c"
 				>
 			</File>
 			<File
-				RelativePath=".\libMinHook\hook.h"
+				RelativePath=".\diStorm3.3\distorm.h"
 				>
 			</File>
 			<File
-				RelativePath=".\libMinHook\pstdint.h"
+				RelativePath=".\diStorm3.3\instructions.c"
 				>
 			</File>
 			<File
-				RelativePath=".\libMinHook\thread.cpp"
+				RelativePath=".\diStorm3.3\instructions.h"
 				>
 			</File>
 			<File
-				RelativePath=".\libMinHook\thread.h"
+				RelativePath=".\diStorm3.3\insts.c"
 				>
 			</File>
 			<File
-				RelativePath=".\libMinHook\trampoline.cpp"
+				RelativePath=".\diStorm3.3\insts.h"
 				>
 			</File>
 			<File
-				RelativePath=".\libMinHook\trampoline.h"
+				RelativePath=".\diStorm3.3\mnemonics.c"
 				>
 			</File>
-			<Filter
-				Name="HDE64"
+			<File
+				RelativePath=".\diStorm3.3\mnemonics.h"
 				>
-				<File
-					RelativePath=".\libMinHook\HDE64\hde64.c"
-					>
-				</File>
-				<File
-					RelativePath=".\libMinHook\HDE64\hde64.h"
-					>
-				</File>
-				<File
-					RelativePath=".\libMinHook\HDE64\table64.h"
-					>
-				</File>
-			</Filter>
-			<Filter
-				Name="HDE32"
+			</File>
+			<File
+				RelativePath=".\diStorm3.3\operands.c"
 				>
-				<File
-					RelativePath=".\libMinHook\HDE32\hde32.c"
-					>
-				</File>
-				<File
-					RelativePath=".\libMinHook\HDE32\hde32.h"
-					>
-				</File>
-				<File
-					RelativePath=".\libMinHook\HDE32\table32.h"
-					>
-				</File>
-			</Filter>
+			</File>
+			<File
+				RelativePath=".\diStorm3.3\operands.h"
+				>
+			</File>
+			<File
+				RelativePath=".\diStorm3.3\prefix.c"
+				>
+			</File>
+			<File
+				RelativePath=".\diStorm3.3\prefix.h"
+				>
+			</File>
+			<File
+				RelativePath=".\diStorm3.3\textdefs.c"
+				>
+			</File>
+			<File
+				RelativePath=".\diStorm3.3\textdefs.h"
+				>
+			</File>
+			<File
+				RelativePath=".\diStorm3.3\wstring.c"
+				>
+			</File>
+			<File
+				RelativePath=".\diStorm3.3\wstring.h"
+				>
+			</File>
+			<File
+				RelativePath=".\diStorm3.3\x86defs.h"
+				>
+			</File>
 		</Filter>
+		<File
+			RelativePath=".\distorm.h"
+			>
+		</File>
 		<File
 			RelativePath=".\main.cpp"
 			>
@@ -411,7 +423,11 @@
 			>
 		</File>
 		<File
-			RelativePath=".\MinHook.h"
+			RelativePath=".\NtHookEngine.cpp"
+			>
+		</File>
+		<File
+			RelativePath=".\NtHookEngine.h"
 			>
 		</File>
 	</Files>

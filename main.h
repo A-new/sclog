@@ -190,14 +190,14 @@ void msg(char* msg, int color = -1, int logit=1){ //safe hook free console outpu
 	DWORD cbWritten=0;
 	
 	if(msg==NULL) return;
-	if(Real_WriteFile == NULL) return;
 
 	if(color) SetConsoleTextAttribute(STDOUT,  color);
-	Real_WriteFile( STDOUT , msg , strlen(msg), &cbWritten, NULL);
+	printf("%s",msg);
 	if(color) SetConsoleTextAttribute(STDOUT,  0x7); //back to default gray
 
 	if(logit==1 && logFile!=NULL){
-		Real_WriteFile( logFile , msg , strlen(msg), &cbWritten, NULL);
+		if(Real_WriteFile == NULL) WriteFile( logFile , msg , strlen(msg), &cbWritten, NULL);
+		  else Real_WriteFile( logFile , msg , strlen(msg), &cbWritten, NULL);
 		FlushFileBuffers(logFile);
 	}
 
