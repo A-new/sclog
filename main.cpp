@@ -12,29 +12,8 @@ Purpose: sclog.exe
 		By using this tool, you take responsibility for any results the use 
 		of this tool may cause. It is NOT guaranteed to be safe.
 
-		sclog supports the following command line arguments:
-
-			Usage: sclog <sc_file> [/addbpx /redir /nonet /nofilt /dump /step]
-
-			sc_file       shellcode file to execute and log
-			/addbpx       Adds a breakpoint to beginning of shellcode buffer
-			/redir        Changes IP specified in Connect() to localhost
-			/nonet        no safety net - if set we dont block any dangerous apis
-			/nofilt       no api filtering - show all hook messages
-			/dump         dumps shellcode buffer to disk at first api call (self decoded)
-			/step         asks the user to permit each hooked API call before executing
-			/hex        does not display hex dumps
-			/anydll       does not block unknown dlls (still safer than nonet)
-			/fhand=<file> opens file to provide a valid file handle shellcode can search for 
-			/hooks        shows implemented hooks
-
-		Several sample shellcode payloads are provided (*.sc) 
-		See the readme file for example output.
 
 License: sclog.exe Copyright (C) 2005 David Zimmer <david@idefense.com, dzzie@yahoo.com>
-
-		 Assembler and Disassembler engines are Copyright (C) 2001 Oleh Yuschuk
-		 and used under GPL License. (disasm.h, asmserv.c, assembl.c, disasm.c)
 
          This program is free software; you can redistribute it and/or modify it
          under the terms of the GNU General Public License as published by the Free
@@ -49,6 +28,39 @@ License: sclog.exe Copyright (C) 2005 David Zimmer <david@idefense.com, dzzie@ya
          You should have received a copy of the GNU General Public License along with
          this program; if not, write to the Free Software Foundation, Inc., 59 Temple
          Place, Suite 330, Boston, MA 02111-1307 USA
+
+/* 
+ *  MinHook - The Minimalistic API Hooking Library for x64/x86
+ *  Copyright (c) 2009 Tsuda Kageyu. 
+ *  All rights reserved.
+
+ ================================================================================
+Portions of this software are Copyright (c) 2008-2009, Vyacheslav Patkov.
+================================================================================
+/*
+ * Hacker Disassembler Engine 32 C
+ * Copyright (c) 2008-2009, Vyacheslav Patkov.
+ * All rights reserved.
+ *
+ */
+
+/*
+ * Hacker Disassembler Engine 64 C
+ * Copyright (c) 2008-2009, Vyacheslav Patkov.
+ * All rights reserved.
+ *
+  
+
+================================================================================
+Portions of this software are Copyright (c) 2005-2007 Paul Hsieh.
+================================================================================
+/*  A portable stdint.h
+ ****************************************************************************
+ *  BSD License:
+ ****************************************************************************
+ *
+ *  Copyright (c) 2005-2007 Paul Hsieh
+ *  All rights reserved.
 
 
 ChangeLog:
@@ -89,6 +101,10 @@ ChangeLog:
 		  - added 5 lines of disasm and reg dump on crash handler, 
 		  - fixed intermittant handling of SetUnhandledExceptionFilter (why flakey dunno)
 
+  9.7.12  - switched to MinHook library w/Hacker Dissassembler Engine to gain x64 compatiability
+          - removed all inline asm for x64 compatiability
+		  - VirtualAllocEx hook removed, -threadredir option removed..
+
 */
 
 
@@ -102,9 +118,11 @@ ChangeLog:
 #include <stdlib.h>
 #include <stdarg.h>
 #include <conio.h>
+#include "MinHook.h"
 
 #pragma warning(disable:4996)
 #pragma warning(disable:4018)
+#pragma comment(lib, "ws2_32.lib")
 
 HANDLE STDOUT;
 HANDLE STDIN;
@@ -137,7 +155,6 @@ char sc_file[MAX_PATH];
 
 void InstallHooks(void);
 
-#include "hooker.h"
 #include "main.h"   //contains a bunch of library functions in it too..
 
 
@@ -856,6 +873,7 @@ void __stdcall My_ExitThread(DWORD a0)
 
 }
 
+/* these get caught lower on the way through the WinApi anyway...
 FILE* __stdcall My_fopen(const char* a0, const char* a1)
 {
 
@@ -885,6 +903,30 @@ size_t __stdcall My_fwrite(const void* a0, size_t a1, size_t a2, FILE* a3)
 
 	return rt;
 }
+
+int My_system(const char* cmd)
+{
+    
+	AddAddr( SCOffset() );	
+	
+	if(!nonet){
+		infomsg("Skipping call to system(%s)\r\n", cmd);
+		DumpBuffer();
+		return 0;
+	}
+	
+	LogAPI("system(%s)\r\n", cmd);
+
+	int ret=0;
+	try {
+        ret = Real_system(cmd);
+    }
+	catch(...){	} 
+
+    return ret;
+
+}
+*/
 
 HANDLE __stdcall My_OpenProcess(DWORD a0,BOOL a1,DWORD a2)
 {
@@ -925,6 +967,7 @@ HMODULE __stdcall My_GetModuleHandleA(LPCSTR a0)
 UINT __stdcall My_WinExec(LPCSTR a0,UINT a1)
 {
 
+	//printf("called from: %x\n", SCOffset() ); 
 	AddAddr( SCOffset() );	
 
     if(!nonet){
@@ -981,28 +1024,7 @@ BOOL __stdcall My_CreateProcessA(LPCSTR a0,LPSTR a1,LPSECURITY_ATTRIBUTES a2,LPS
 
 }
 
-int My_system(const char* cmd)
-{
-    
-	AddAddr( SCOffset() );	
-	
-	if(!nonet){
-		infomsg("Skipping call to system(%s)\r\n", cmd);
-		DumpBuffer();
-		return 0;
-	}
-	
-	LogAPI("system(%s)\r\n", cmd);
 
-	int ret=0;
-	try {
-        ret = Real_system(cmd);
-    }
-	catch(...){	} 
-
-    return ret;
-
-}
 
 HANDLE __stdcall My_CreateRemoteThread(HANDLE a0,LPSECURITY_ATTRIBUTES a1,DWORD a2,LPTHREAD_START_ROUTINE a3,LPVOID a4,DWORD a5,LPDWORD a6)
 {
@@ -1031,25 +1053,25 @@ HANDLE __stdcall My_CreateRemoteThread(HANDLE a0,LPSECURITY_ATTRIBUTES a1,DWORD 
 	AddAddr( SCOffset() );	
 	LogAPI("CreateRemoteThread(h=%x, start=%x, param=%x)\r\n", a0,a3,a4);
 
-	if(threadRedir==0){
+	//if(threadRedir==0){
 		//needed for IE UrlDownload to actually occur
 		return Real_CreateRemoteThread(a0,a1,a2,a3,a4,a5,a6);
-	}else{
+	/*}else{
 
 		//if they inject code in to another process and you want to see it all inline then use this...
 		LogAPI("\tTransferring execution to threadstart\r\n");
 
 		HANDLE my_ret = 0;
 	
-		_asm{
+/ *todo		_asm{
 			mov eax, a4
 			mov ebx, a3
 			push eax
 			call ebx
 		}
-
+* /
 		return (HANDLE)1;
-	}
+	}*/
 
 }
 
@@ -1065,14 +1087,14 @@ BOOL __stdcall My_WriteProcessMemory(HANDLE a0,LPVOID a1,LPVOID a2,DWORD a3,LPDW
     BOOL ret = 0;
     try {
 
-		if(threadRedir == 1){
+		/*if(threadRedir == 1){
 			LogAPI("  (Writing in process)\r\n");
 			if(showhex==1) hexdump( (unsigned char*) a2, a3 );
 			memcpy(a1, a2, a3); //VirtualAllocEx always writes in process memory (never external)
 			ret = 1;            //if a0 is from CreateProcessA though..then we have a problem...Virtalloc was made..
 			if(a4 != 0) *a4 = a3;
 		}
-		else{
+		else{*/
 			if(nonet){
 				ret = Real_WriteProcessMemory(a0,a1,a2,a3,a4);
 				LogAPI("  Allowed\r\n");
@@ -1080,7 +1102,7 @@ BOOL __stdcall My_WriteProcessMemory(HANDLE a0,LPVOID a1,LPVOID a2,DWORD a3,LPDW
 				ret = 1;
 				LogAPI("  (Unsafe skipping...)\r\n");
 			}
-		}
+		//}
 
 		if(dumpMode){
 			char* ext[200];
@@ -1174,16 +1196,25 @@ void usage(void){
 
 	system("mode con lines=45");
 
-	printf("           Generic Shellcode Logger v0.1c BETA\r\n");
-	printf(" Author David Zimmer <dzzie@yahoo.com> Developed @ iDefense.com\r\n");
-	printf(" Uses the GPL Asm/Dsm Engines from OllyDbg (C) 2001 Oleh Yuschuk\r\n");
+	SetConsoleTextAttribute(STDOUT,  0x0F); //white
+	printf("           Generic Shellcode Logger v0.1d BETA\r\n");
+	printf(" * David Zimmer <dzzie@yahoo.com> Developed @ iDefense.com\r\n");
+	SetConsoleTextAttribute(STDOUT,  0x07); //std gray
+
+	printf(" * 3rd party code includes:\r\n");
+	printf(" *   libMinHook - The Minimalistic API Hooking Library for x86/x64\r\n");
+	printf(" *   Copyright (c) 2009 Tsuda Kageyu. All rights reserved.\r\n");
+	//printf(" *\r\n");
+	printf(" *   Hacker Disassembler Engine x86/x64\r\n");
+	printf(" *   Copyright (c) 2008-2009, Vyacheslav Patkov. All rights reserved.\r\n");
+	//printf(" *\r\n");
+	printf(" *   portable stdint.h Copyright (c) 2005-2007 Paul Hsieh. All rights reserved.\r\n");
+
 	printf("      ---- Compilation date: %s %s ----\r\n\r\n", __DATE__, __TIME__);
 
 	SetConsoleTextAttribute(STDOUT,  0x0F); //white
 	
-	printf(" Usage: sclog file [/addbpx /redir /nonet /nofilt /dump /step /anydll\r\n");
-	printf("                    /nohex /fhand <file> /showadr /log <file> /alloc]\r\n\r\n");
-	printf("    file\t\tshellcode file to execute and log\r\n");
+	printf(" Usage: sclog <binary_shellcode_file> [options]\r\n\r\n");
 	printf("    /addbpx\t\tAdds a breakpoint to beginning of shellcode buffer\r\n");
 	printf("    /redir\t\tChanges IP specified in Connect() to localhost\r\n");
 	printf("    /nonet\t\tno safety net - if set we dont block any dangerous apis\r\n");
@@ -1199,12 +1230,12 @@ void usage(void){
 	printf("    /dll <dllfile> \tCalls LoadLibrary on <dllfile> to add to memory map\r\n"); 
 	printf("    /foff hexnum \tStarts execution at file offset\r\n"); 
 	printf("    /va  \t\t0xBase-0xSize  VirtualAlloc memory at 0xBase of 0xSize\r\n"); 
-	printf("    /threadredir  \tthread redirection mode (poc feature)\r\n"); 
+	//printf("    /threadredir  \tthread redirection mode (poc feature)\r\n"); 
 	printf("    /enabledebug  \ton crash, allow system jit debugger to handle\r\n"); 
 	printf("    /hooks \t\tshows implemented hooks\r\n\r\n"); 
 
 	SetConsoleTextAttribute(STDOUT,  0x07); //default gray
-	
+
 	printf(" Note that many interesting apis are logged, but not all.\r\n");
 	printf(" Shellcode is allowed to run within a minimal sandbox..\r\n");
 	printf(" and only known safe (hooked) dlls are allowed to load\r\n\r\n");
@@ -1212,6 +1243,9 @@ void usage(void){
 	printf(" all paths are blocked that could lead to system subversion.\r\n");
 	printf(" As it runs, API hooks will be used to log actions skipping\r\n");
 	printf(" many dangerous functions.\r\n\r\n");
+
+	printf("Use the x64 build for x64 shellcode. Not all shellcode is\r\n");
+	printf("compatiable with the Win7 x86 PEB. XP is recommended.\r\n\r\n");
 
 	SetConsoleTextAttribute(STDOUT,  0x0E); //yellow
 	printf(" Use at your own risk!\r\n");
@@ -1229,7 +1263,7 @@ LONG __stdcall exceptFilter(struct _EXCEPTION_POINTERS* ExceptionInfo){
 
 	infomsg("   %x Crash!\r\n\r\n", eAdr); 
 
-	t_disasm td;
+/*	t_disasm td;
 	unsigned int a = (int)ExceptionInfo->ExceptionRecord->ExceptionAddress;
 
 	try{
@@ -1256,7 +1290,7 @@ LONG __stdcall exceptFilter(struct _EXCEPTION_POINTERS* ExceptionInfo){
 	}catch(...){
 		infomsg("Could not disasm exception address for display...\n");
 	}
-	
+*/
 	myAtExit();
 	
 	if(enableDebug==1){
@@ -1290,6 +1324,12 @@ void main(int argc, char **argv){
 	system("cls");
 	//system("mode con lines=45");
 	printf("\r\n");
+
+	if (MH_Initialize() != MH_OK)
+	{
+		printf("Could not initilize minhook library...");
+		return;
+	}
 
 	STDOUT = GetStdHandle(STD_OUTPUT_HANDLE);
 	STDIN  = GetStdHandle(STD_INPUT_HANDLE);
@@ -1463,7 +1503,11 @@ void main(int argc, char **argv){
 		exit(0);
 	};
 
-	printf("Loading Shellcode into memory\r\n");
+	#ifdef _WIN64 
+		printf("Loading x64 Shellcode into memory\r\n");
+	#else
+		printf("Loading Shellcode into memory\r\n");
+	#endif
 
 	if(addbpx){
 		buf[0]= (unsigned char)0xCC;
@@ -1497,12 +1541,9 @@ void main(int argc, char **argv){
 
 	if(!addbpx) SetUnhandledExceptionFilter(exceptFilter);
 
-	_asm{
-		   mov eax, buf
-		   mov ebx, foff
-		   add eax, ebx
-		   jmp eax
-	}
+	int (*sc)();
+	sc = (int (*)())&buf[foff]; //9.7.12 no more inline asm...
+	(int)(*sc)();
 
 	//we wont ever get down here..
 
@@ -1511,8 +1552,19 @@ void main(int argc, char **argv){
 
 
 
-
+int lastError=0;
 //_______________________________________________ install hooks fx 
+
+bool InstallHook( void* real, void* hook, void* thunk){
+
+	lastError = MH_CreateHook(real, hook, reinterpret_cast<void**>(thunk) );  
+	if(lastError!= MH_OK) return false;
+
+	lastError = MH_EnableHook(real);
+	if(lastError!= MH_OK) return false;
+
+	return true;
+}
 
 void DoHook(void* real, void* hook, void* thunk, char* name){
 
@@ -1520,16 +1572,16 @@ void DoHook(void* real, void* hook, void* thunk, char* name){
 		printf("\t%s\r\n",name);
 		hook_count++;
 	}else{
-		if ( !InstallHook( real, hook, thunk) ){ //try to install the real hook here
-			infomsg("Install %s hook failed...Error: %s\r\n", name, &lastError);
-			ExitProcess(0);
+		if ( !InstallHook( real, hook, thunk)==1 ){ //try to install the real hook here
+			infomsg("Install %s hook failed...Error: %d\r\n", name, lastError);
+			if( Real_ExitProcess == NULL ) ExitProcess(0); else Real_ExitProcess(0);
 		}
 	}
 }
 
 
 //Macro wrapper to build DoHook() call
-#define ADDHOOK(name) DoHook( name, My_##name, Real_##name, #name );
+#define ADDHOOK(name) DoHook( name, My_##name, &Real_##name, #name );
 
 
 void InstallHooks(void)
@@ -1566,16 +1618,17 @@ void InstallHooks(void)
 	ADDHOOK(shutdown);
 	ADDHOOK(socket);
 	ADDHOOK(WSASocketA);
-	ADDHOOK(system);
+	/*ADDHOOK(system);
 	ADDHOOK(fopen);
-	ADDHOOK(fwrite);
+	ADDHOOK(fwrite);*/
+
 
 	//_asm int 3
 
 	//ADDHOOK(URLDownloadToFileA);
 
 	void* real = GetProcAddress( GetModuleHandle("urlmon.dll"), "URLDownloadToFileA");
-	if ( !InstallHook( real, My_URLDownloadToFileA, Real_URLDownloadToFileA) ){ 
+	if ( !InstallHook( real, My_URLDownloadToFileA, &Real_URLDownloadToFileA) ){ 
 		infomsg("Install hook URLDownloadToFileA failed...Error: \r\n");
 		ExitProcess(0);
 	}
@@ -1593,7 +1646,7 @@ void InstallHooks(void)
 	//ADDHOOK(URLDownloadToCacheFile);
 
 	real = GetProcAddress( GetModuleHandle("urlmon.dll"), "URLDownloadToCacheFileA");
-	if ( !InstallHook( real, My_URLDownloadToCacheFile, Real_URLDownloadToCacheFile) ){ 
+	if ( !InstallHook( real, My_URLDownloadToCacheFile, &Real_URLDownloadToCacheFile) ){ 
 		infomsg("Install hook URLDownloadToCacheFile failed...Error: \r\n");
 		ExitProcess(0);
 	}

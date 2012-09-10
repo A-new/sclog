@@ -10,6 +10,14 @@ Begin VB.Form Form1
    ScaleHeight     =   8550
    ScaleWidth      =   9480
    StartUpPosition =   3  'Windows Default
+   Begin VB.CommandButton Command3 
+      Caption         =   "Conv"
+      Height          =   315
+      Left            =   120
+      TabIndex        =   15
+      Top             =   360
+      Width           =   675
+   End
    Begin VB.TextBox Org 
       BeginProperty Font 
          Name            =   "Terminal"
@@ -375,6 +383,10 @@ Private Sub Command1_Click()
 End Sub
 
 
+
+Private Sub Command3_Click()
+    frmConvert.Show
+End Sub
 
 Private Sub Form_Load()
     

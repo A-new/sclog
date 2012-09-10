@@ -1,9 +1,6 @@
 /*
 License: sclog.exe Copyright (C) 2005 David Zimmer <david@idefense.com, dzzie@yahoo.com>
 
-		 Assembler and Disassembler engines are Copyright (C) 2001 Oleh Yuschuk
-		 and used under GPL License. (disasm.h, asmserv.c, assembl.c, disasm.c)
-
          This program is free software; you can redistribute it and/or modify it
          under the terms of the GNU General Public License as published by the Free
          Software Foundation; either version 2 of the License, or (at your option)
@@ -32,65 +29,58 @@ struct mem VAlloc;
 HANDLE logFile = NULL;
 
 #include <tlhelp32.h> 
+#include <INTRIN.H>
 
-//basically used to give us a function pointer with right prototype
-//and 24 byte empty buffer inline which we assemble commands into in the
-//hook proceedure. 
-#define ALLOC_THUNK(prototype) __declspec(naked) prototype { __asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop};__asm{nop}; }	   
-
-ALLOC_THUNK( HMODULE  __stdcall Real_LoadLibraryA(LPCSTR a0) );
-ALLOC_THUNK( BOOL     __stdcall Real_WriteFile(HANDLE a0,LPCVOID a1,DWORD a2,LPDWORD a3,LPOVERLAPPED a4) ); 
-ALLOC_THUNK( HANDLE   __stdcall Real_CreateFileA(LPCSTR a0,DWORD a1,DWORD a2,LPSECURITY_ATTRIBUTES a3,DWORD a4,DWORD a5,HANDLE a6) );
-ALLOC_THUNK( HMODULE  __stdcall Real_LoadLibraryExA(LPCSTR a0,HANDLE a1,DWORD a2) );
-ALLOC_THUNK( HMODULE  __stdcall Real_LoadLibraryExW(LPCWSTR a0,HANDLE a1,DWORD a2) );
-ALLOC_THUNK( HMODULE  __stdcall Real_LoadLibraryW(LPCWSTR a0) );
-ALLOC_THUNK( BOOL	  __stdcall Real_WriteFileEx(HANDLE a0,LPCVOID a1,DWORD a2,LPOVERLAPPED a3,LPOVERLAPPED_COMPLETION_ROUTINE a4)) ;
-ALLOC_THUNK( HFILE    __stdcall Real__lclose(HFILE a0));
-ALLOC_THUNK( HFILE	  __stdcall Real__lcreat(LPCSTR a0,int a1));
-ALLOC_THUNK( HFILE	  __stdcall Real__lopen(LPCSTR a0,int a1));
-ALLOC_THUNK( UINT	  __stdcall Real__lread(HFILE a0,LPVOID a1,UINT a2));
-ALLOC_THUNK( UINT	  __stdcall Real__lwrite(HFILE a0,LPCSTR a1,UINT a2));
-ALLOC_THUNK( BOOL	  __stdcall Real_CreateProcessA(LPCSTR a0,LPSTR a1,LPSECURITY_ATTRIBUTES a2,LPSECURITY_ATTRIBUTES a3,BOOL a4,DWORD a5,LPVOID a6,LPCSTR a7,struct _STARTUPINFOA* a8,LPPROCESS_INFORMATION a9));
-ALLOC_THUNK( UINT	  __stdcall Real_WinExec(LPCSTR a0,UINT a1));
-ALLOC_THUNK( BOOL	  __stdcall Real_DeleteFileA(LPCSTR a0));
-ALLOC_THUNK( void	  __stdcall Real_ExitProcess(UINT a0));
-ALLOC_THUNK( void	  __stdcall Real_ExitThread(DWORD a0));
-ALLOC_THUNK( FARPROC  __stdcall Real_GetProcAddress(HMODULE a0,LPCSTR a1));
-ALLOC_THUNK( DWORD	  __stdcall Real_WaitForSingleObject(HANDLE a0,DWORD a1));
-ALLOC_THUNK( HANDLE	  __stdcall Real_CreateRemoteThread(HANDLE a0,LPSECURITY_ATTRIBUTES a1,DWORD a2,LPTHREAD_START_ROUTINE a3,LPVOID a4,DWORD a5,LPDWORD a6));
-ALLOC_THUNK( HANDLE	  __stdcall Real_OpenProcess(DWORD a0,BOOL a1,DWORD a2));
-ALLOC_THUNK( BOOL	  __stdcall Real_WriteProcessMemory(HANDLE a0,LPVOID a1,LPVOID a2,DWORD a3,LPDWORD a4));
-ALLOC_THUNK( HMODULE  __stdcall Real_GetModuleHandleA(LPCSTR a0));
-ALLOC_THUNK( SOCKET	  __stdcall Real_accept(SOCKET a0,sockaddr* a1,int* a2));
-ALLOC_THUNK( int	  __stdcall Real_bind(SOCKET a0,SOCKADDR_IN* a1,int a2));
-ALLOC_THUNK( int	  __stdcall Real_closesocket(SOCKET a0));
-ALLOC_THUNK( int	  __stdcall Real_connect(SOCKET a0,SOCKADDR_IN* a1,int a2));
-ALLOC_THUNK( hostent* __stdcall Real_gethostbyaddr(char* a0,int a1,int a2));
-ALLOC_THUNK( hostent* __stdcall Real_gethostbyname(char* a0));
-ALLOC_THUNK( int	  __stdcall Real_gethostname(char* a0,int a1));
-ALLOC_THUNK( int	  __stdcall Real_listen(SOCKET a0,int a1));
-ALLOC_THUNK( int	  __stdcall Real_recv(SOCKET a0,char* a1,int a2,int a3));
-ALLOC_THUNK( int	  __stdcall Real_send(SOCKET a0,char* a1,int a2,int a3));
-ALLOC_THUNK( int	  __stdcall Real_shutdown(SOCKET a0,int a1));
-ALLOC_THUNK( SOCKET   __stdcall Real_socket(int a0,int a1,int a2));
-ALLOC_THUNK( SOCKET   __stdcall Real_WSASocketA(int a0,int a1,int a2,struct _WSAPROTOCOL_INFOA* a3,GROUP a4,DWORD a5));
-ALLOC_THUNK( int	  Real_system(const char* cmd));
-ALLOC_THUNK( FILE*	  Real_fopen(const char* cmd, const char* mode));
-ALLOC_THUNK( size_t   Real_fwrite(const void* a0, size_t a1, size_t a2, FILE* a3));
-
-ALLOC_THUNK( int	  __stdcall Real_URLDownloadToFileA(int a0,char* a1, char* a2, DWORD a3, int a4));
-ALLOC_THUNK( int	  __stdcall Real_URLDownloadToCacheFile(int a0,char* a1, char* a2, DWORD a3, DWORD a4, int a5));
-
-ALLOC_THUNK( DWORD    __stdcall Real_GetFileSize( HANDLE a0, LPDWORD a1 ) );
-ALLOC_THUNK( HANDLE   __stdcall Real_FindFirstFileA( LPCSTR a0, LPWIN32_FIND_DATAA a1 ) );
-ALLOC_THUNK( HGLOBAL  __stdcall Real_GlobalAlloc( UINT a0, DWORD a1 ) );
-ALLOC_THUNK( HGLOBAL  __stdcall Real_GlobalFree( HGLOBAL a0 ) );
-ALLOC_THUNK( LPVOID   __stdcall Real_VirtualAlloc( LPVOID a0, DWORD a1, DWORD a2, DWORD a3 ) );
-ALLOC_THUNK( BOOL     __stdcall Real_VirtualFree( LPVOID a0, DWORD a1, DWORD a2 ) );
-ALLOC_THUNK( DWORD    __stdcall Real_GetTempPathA( DWORD a0, LPSTR a1 ) );
-
-ALLOC_THUNK( LPVOID __stdcall Real_VirtualAllocEx( HANDLE a0, LPVOID a1, DWORD a2, DWORD a3, DWORD a4 ) );
-ALLOC_THUNK( DWORD __stdcall Real_SetFilePointer( HANDLE a0, LONG a1, PLONG a2, DWORD a3 ) );
+HMODULE  (__stdcall *Real_LoadLibraryA)(LPCSTR a0);
+BOOL     (__stdcall *Real_WriteFile)(HANDLE a0,LPCVOID a1,DWORD a2,LPDWORD a3,LPOVERLAPPED a4) = NULL;
+HANDLE   (__stdcall *Real_CreateFileA)(LPCSTR a0,DWORD a1,DWORD a2,LPSECURITY_ATTRIBUTES a3,DWORD a4,DWORD a5,HANDLE a6);
+HMODULE  (__stdcall *Real_LoadLibraryExA)(LPCSTR a0,HANDLE a1,DWORD a2);
+HMODULE  (__stdcall *Real_LoadLibraryExW)(LPCWSTR a0,HANDLE a1,DWORD a2);
+HMODULE  (__stdcall *Real_LoadLibraryW)(LPCWSTR a0);
+BOOL	  (__stdcall *Real_WriteFileEx)(HANDLE a0,LPCVOID a1,DWORD a2,LPOVERLAPPED a3,LPOVERLAPPED_COMPLETION_ROUTINE a4) ;
+HFILE    (__stdcall *Real__lclose)(HFILE a0);
+HFILE	  (__stdcall *Real__lcreat)(LPCSTR a0,int a1);
+HFILE	  (__stdcall *Real__lopen)(LPCSTR a0,int a1);
+UINT	  (__stdcall *Real__lread)(HFILE a0,LPVOID a1,UINT a2);
+UINT	  (__stdcall *Real__lwrite)(HFILE a0,LPCSTR a1,UINT a2);
+BOOL	  (__stdcall *Real_CreateProcessA)(LPCSTR a0,LPSTR a1,LPSECURITY_ATTRIBUTES a2,LPSECURITY_ATTRIBUTES a3,BOOL a4,DWORD a5,LPVOID a6,LPCSTR a7,struct _STARTUPINFOA* a8,LPPROCESS_INFORMATION a9);
+UINT	  (__stdcall *Real_WinExec)(LPCSTR a0,UINT a1);
+BOOL	  (__stdcall *Real_DeleteFileA)(LPCSTR a0);
+void	  (__stdcall *Real_ExitProcess)(UINT a0) = NULL;
+void	  (__stdcall *Real_ExitThread)(DWORD a0);
+FARPROC  (__stdcall *Real_GetProcAddress)(HMODULE a0,LPCSTR a1);
+DWORD	  (__stdcall *Real_WaitForSingleObject)(HANDLE a0,DWORD a1);
+HANDLE	  (__stdcall *Real_CreateRemoteThread)(HANDLE a0,LPSECURITY_ATTRIBUTES a1,DWORD a2,LPTHREAD_START_ROUTINE a3,LPVOID a4,DWORD a5,LPDWORD a6);
+HANDLE	  (__stdcall *Real_OpenProcess)(DWORD a0,BOOL a1,DWORD a2);
+BOOL	  (__stdcall *Real_WriteProcessMemory)(HANDLE a0,LPVOID a1,LPVOID a2,DWORD a3,LPDWORD a4);
+HMODULE  (__stdcall *Real_GetModuleHandleA)(LPCSTR a0);
+SOCKET	  (__stdcall *Real_accept)(SOCKET a0,sockaddr* a1,int* a2);
+int	  (__stdcall *Real_bind)(SOCKET a0,SOCKADDR_IN* a1,int a2);
+int	  (__stdcall *Real_closesocket)(SOCKET a0);
+int	  (__stdcall *Real_connect)(SOCKET a0,SOCKADDR_IN* a1,int a2);
+hostent* (__stdcall *Real_gethostbyaddr)(char* a0,int a1,int a2);
+hostent* (__stdcall *Real_gethostbyname)(char* a0);
+int	  (__stdcall *Real_gethostname)(char* a0,int a1);
+int	  (__stdcall *Real_listen)(SOCKET a0,int a1);
+int	  (__stdcall *Real_recv)(SOCKET a0,char* a1,int a2,int a3);
+int	  (__stdcall *Real_send)(SOCKET a0,char* a1,int a2,int a3);
+int	  (__stdcall *Real_shutdown)(SOCKET a0,int a1);
+SOCKET   (__stdcall *Real_socket)(int a0,int a1,int a2);
+SOCKET   (__stdcall *Real_WSASocketA)(int a0,int a1,int a2,struct _WSAPROTOCOL_INFOA* a3,GROUP a4,DWORD a5);
+//int	  (Real_system)(const char* cmd);
+//FILE*	  (Real_fopen)(const char* cmd, const char* mode);
+//size_t  (Real_fwrite)(const void* a0, size_t a1, size_t a2, FILE* a3);
+int	  (__stdcall *Real_URLDownloadToFileA)(int a0,char* a1, char* a2, DWORD a3, int a4);
+int	  (__stdcall *Real_URLDownloadToCacheFile)(int a0,char* a1, char* a2, DWORD a3, DWORD a4, int a5);
+DWORD    (__stdcall *Real_GetFileSize)( HANDLE a0, LPDWORD a1 );
+HANDLE   (__stdcall *Real_FindFirstFileA)( LPCSTR a0, LPWIN32_FIND_DATAA a1 );
+HGLOBAL  (__stdcall *Real_GlobalAlloc)( UINT a0, DWORD a1 );
+HGLOBAL  (__stdcall *Real_GlobalFree)( HGLOBAL a0 );
+LPVOID   (__stdcall *Real_VirtualAlloc)( LPVOID a0, DWORD a1, DWORD a2, DWORD a3 );
+BOOL     (__stdcall *Real_VirtualFree)( LPVOID a0, DWORD a1, DWORD a2 );
+DWORD    (__stdcall *Real_GetTempPathA)( DWORD a0, LPSTR a1 );
+LPVOID (__stdcall *Real_VirtualAllocEx)( HANDLE a0, LPVOID a1, DWORD a2, DWORD a3, DWORD a4 );
+DWORD (__stdcall *Real_SetFilePointer)( HANDLE a0, LONG a1, PLONG a2, DWORD a3 );
 
 //my header and lib files are old! and i dont want to link to msvc90.dll with vs08..so fuck it
 //ALLOC_THUNK( DWORD    __stdcall Real_GetFileSizeEx( HANDLE a0, PLARGE_INTEGER  a1 ) );
@@ -165,23 +155,6 @@ found:
 
 
 //we cant just write to str because it may not be writable memory :-/
-/*
-void strlower(char *str){
-	
-	int max=1000;
-	if(str ==0) return;
-
-	int l = strlen(str);
-	if(l>max)  l = max;
-
-	for(int i=0; i < l; i++){
-		str[i] = tolower(str[i]);
-	}
-
-}
-*/
-
-
 char* strlower(char *str){
 	
 	int max=1000;
@@ -205,16 +178,8 @@ char* strlower(char *str){
 char* ipfromlng(SOCKADDR_IN* sck){
 	
 	char *ip = (char*)malloc(16);
-	unsigned char *x=0;
-
-    _asm{
-		 mov eax, [sck]
-		 add eax,4
-		 mov x,eax
-	}
-
+	unsigned char *x= (unsigned char*)(((int)sck)+4);
 	sprintf(ip,"%d.%d.%d.%d\x00", x[0], x[1], x[2], x[3]);
-	
 	return ip;
 
 }
@@ -223,6 +188,9 @@ char* ipfromlng(SOCKADDR_IN* sck){
 void msg(char* msg, int color = -1, int logit=1){ //safe hook free console output
 	
 	DWORD cbWritten=0;
+	
+	if(msg==NULL) return;
+	if(Real_WriteFile == NULL) return;
 
 	if(color) SetConsoleTextAttribute(STDOUT,  color);
 	Real_WriteFile( STDOUT , msg , strlen(msg), &cbWritten, NULL);
@@ -413,7 +381,7 @@ void LogAPI(const char *format, ...)
 
 //used in WaitForSingleObject, LoadLibrary and GetProcAddress..does not account for new GAlloc or VAlloc bufs
 
-__declspec(naked) int calledFromSC(){ //seems to work anyway :P
+/*__declspec(naked) int calledFromSC(){ //seems to work anyway :P
 	
 	_asm{
 			 mov eax, nofilt  //no filter option display all hook output
@@ -440,30 +408,47 @@ __declspec(naked) int calledFromSC(){ //seems to work anyway :P
 
 	}
 	
-}
+}*/
 
-/* old versions only accounted for the main shellcode buffer, new ones account for GAlloc and VAlloc
-__declspec(naked) int SCOffset(){ 
-	
-	_asm{
-			 mov eax, [ebp+4]  //return address of parent function (were nekkid)
-			 mov ecx, buf      //start offset of payload
-			 sub eax, ecx      //eax now = relative buffer offset of call
-			 ret
+
+
+#if defined _M_X64 
+	//ContextRecord.Eip = (ULONG)_ReturnAddress();
+    //ContextRecord.Esp = (ULONG)_AddressOfReturnAddress();
+    //ContextRecord.Ebp = *((ULONG *)_AddressOfReturnAddress()-1);
+
+	//#define	SCOffset() (int)_AddressOfReturnAddress()
+      #define	SCOffset() (int)_ReturnAddress()
+
+	/*inline int SCOffset(){
+		//dotn use RTLCaptureContext...
+		//requires at least XP, make sure to turn optimizations off for release,still crashs on x64
+		//http://www.bytetalk.net/2011/06/why-rtlcapturecontext-crashes-on.html
+		//http://zachsaw.blogspot.com.au/2010/11/wow64-bug-getthreadcontext-may-return.html
+
+		int rv = (int)_AddressOfReturnAddress();
+		printf("ret=%x\n",rv);
+		return rv;
+	}*/
+#else
+	__declspec(naked) int SCOffset(){ //has to be called from parent hook function to mean anything...
+		_asm{
+				 mov eax, [ebp+4]  //return address of parent function (were nekkid)
+				 ret
+		}
 	}
-	
+#endif
+
+int calledFromSC(){
+
+	if(nofilt==1) return 1;
+
+	int x = SCOffset();
+	if( x < (int)&buf) return 0;
+	if( (x > (((int)&buf) + bufsz)) ) return 0;
+	return 1;
+
 }
-
-
-void AddAddr(unsigned int offset){
-	char tmp[20];
-	
-	if(offset <= bufsz) sprintf(tmp,"%4X ", offset);
-	 else strcpy(tmp," --- "); //must be from other api we dont care (bad calc anyway)
-
-	msg(tmp);
-}
-*/
 
 //substantial change in behavior 10.2.10
 void AddAddr(unsigned int retAdr){
@@ -498,11 +483,5 @@ void AddAddr(unsigned int retAdr){
 	//return color;
 }
 
-__declspec(naked) int SCOffset(){ //has to be called from parent hook function to mean anything...
-	
-	_asm{
-			 mov eax, [ebp+4]  //return address of parent function (were nekkid)
-			 ret
-	}
-	
-}
+ 
+
