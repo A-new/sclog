@@ -1,4 +1,18 @@
 
+License/Credits
+------------------------------------------------------------
+sclog developer David Zimmer <dzzie@yahoo.com>
+
+sclog uses a slightly modified version of the open source x86/x64 
+NTCore Hooking Engine written by: Daniel Pistelli <ntcore@gmail.com>
+
+as well as the diStorm x86/x64 GPL disassembler engine
+Copyright (C) 2003-2012 Gil Dabah. diStorm at gmail dot com.
+
+
+About:
+-------------------------------------------------------------
+
 sclog is a GPL shellcode analysis project that was released 
 in 2005 as part of the Malcode Analyst Pack while I was at iDefense
 
@@ -58,7 +72,5 @@ Offsets shown in the output can be in one of 5 forms.
 
 Currently it is still a bit messy in there as a jiggle things around. We are after all still
 experimenting with whats needed and how to do it.
-
-
 
 

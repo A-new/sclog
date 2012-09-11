@@ -128,6 +128,9 @@ void InstallHooks(void);
 
 #include "main.h"   //contains a bunch of library functions in it too..
 
+void __cdecl HE_DebugHandler(char* msg){
+	infomsg("     %s", msg);
+}
 
 //___________________________________________________hook implementations _________
 
@@ -165,11 +168,12 @@ HGLOBAL __stdcall My_GlobalAlloc( UINT a0, DWORD a1 )
 	}
 	catch(...){}
 	
-	if( calledFromSC() ){
+	int so = SCOffset();
+	if( calledFromSC( so ) ){
 		GAlloc.offset = (int)ret;
 		GAlloc.size = a1;
 
-		AddAddr( SCOffset() );
+		AddAddr( so );
 		LogAPI("GlobalAlloc(flags=0x%x, size:0x%x) = 0x%x\r\n",a0,a1,ret);
 	}
 
@@ -178,9 +182,9 @@ HGLOBAL __stdcall My_GlobalAlloc( UINT a0, DWORD a1 )
 
 HGLOBAL __stdcall My_GlobalFree( HGLOBAL a0 )
 {
-
-	if( calledFromSC() ){
-		AddAddr( SCOffset() );
+	int so = SCOffset();
+	if( calledFromSC( so ) ){
+		AddAddr( so );
 		LogAPI("GlobalFree()\r\n");
 	
 		if(GAlloc.offset > 0 && GAlloc.size > 0){
@@ -215,11 +219,12 @@ LPVOID __stdcall My_VirtualAlloc( LPVOID a0, DWORD a1, DWORD a2, DWORD a3 )
 	}
 	catch(...){}
 	
-	if( calledFromSC() ){
+	int so = SCOffset();
+	if( calledFromSC( so ) ){
 		VAlloc.offset = (int)ret;
 		VAlloc.size = a1;
 
-		AddAddr( SCOffset() );
+		AddAddr( so );
 		LogAPI("VirtualAlloc(size:0x%x) = 0x%x\r\n", a1, ret);
 	}
 
@@ -255,8 +260,9 @@ LPVOID __stdcall My_VirtualAllocEx( HANDLE a0, LPVOID a1, DWORD a2, DWORD a3, DW
 BOOL __stdcall My_VirtualFree( LPVOID a0, DWORD a1, DWORD a2 )
 {
 
-	if( calledFromSC() ){
-		AddAddr( SCOffset() );
+	int so = SCOffset();
+	if( calledFromSC( so ) ){
+		AddAddr( so );
 		LogAPI("VirtualFree()\r\n");
 		
 		if(VAlloc.offset > 0 && VAlloc.size > 0){
@@ -536,8 +542,8 @@ BOOL __stdcall My_WriteFileEx(HANDLE a0,LPCVOID a1,DWORD a2,LPOVERLAPPED a3,LPOV
 
 DWORD __stdcall My_WaitForSingleObject(HANDLE a0,DWORD a1)
 {
-   
-   	if( calledFromSC() ){
+    int so = SCOffset();
+   	if( calledFromSC( so ) ){
 		AddAddr( SCOffset() );	
 		LogAPI("WaitForSingleObject(%x,%x)\r\n", a0, a1);
 	}
@@ -818,8 +824,8 @@ int My_URLDownloadToCacheFile(int a0,char* a1, char* a2, DWORD a3, DWORD a4, int
 
 void __stdcall My_ExitProcess(UINT a0)
 {
-    
-	if( calledFromSC() ){
+    int so = SCOffset();
+	if( calledFromSC( so ) ){
 		AddAddr( SCOffset() );	
 		LogAPI("ExitProcess()\r\n");
 	}
@@ -833,8 +839,8 @@ void __stdcall My_ExitProcess(UINT a0)
 
 void __stdcall My_ExitThread(DWORD a0)
 {
-    
-	if( calledFromSC() ){
+    int so = SCOffset();
+	if( calledFromSC( so ) ){
 		AddAddr( SCOffset() );	
 		LogAPI("ExitThread()\r\n");
 	}
@@ -920,8 +926,8 @@ HANDLE __stdcall My_OpenProcess(DWORD a0,BOOL a1,DWORD a2)
 
 HMODULE __stdcall My_GetModuleHandleA(LPCSTR a0)
 {
-
-    if( calledFromSC() ){
+	int so = SCOffset();
+    if( calledFromSC( so ) ){
 		AddAddr( SCOffset() );	
 		LogAPI("GetModuleHandleA(%s)\r\n", a0);
 	}
@@ -1127,8 +1133,9 @@ HMODULE __stdcall My_LoadLibraryA(char* dll)
 		infomsg("Halting..LoadLibrary for dll not in safe list: %s\r\n",a0);
 		exit(0);
 	}
-		
-	if( calledFromSC() ){
+
+	int so = SCOffset();
+	if( calledFromSC( so ) ){
 		AddAddr( SCOffset() );
 		LogAPI("LoadLibraryA(%s)\r\n",  a0);
 	}
@@ -1149,8 +1156,9 @@ HMODULE __stdcall My_LoadLibraryA(char* dll)
 FARPROC __stdcall My_GetProcAddress(HMODULE a0,LPCSTR a1)
 {
 	
-	if( calledFromSC() ){
-		AddAddr( SCOffset() );	
+	int so = SCOffset();
+	if( calledFromSC( so ) ){
+		AddAddr( so );	
 		LogAPI("GetProcAddress(%s)\r\n", a1);
 	}
 
@@ -1244,15 +1252,26 @@ LONG __stdcall exceptFilter(struct _EXCEPTION_POINTERS* ExceptionInfo){
 			free(disasm);
 		}
 
-		LogAPI("  eax %-8x  ", ExceptionInfo->ContextRecord->Eax);
-		LogAPI("ebx %-8x  ", ExceptionInfo->ContextRecord->Ebx);
-		LogAPI("ecx %-8x  ", ExceptionInfo->ContextRecord->Ecx);
-		LogAPI("edx %-8x  \r\n", ExceptionInfo->ContextRecord->Edx);
-		LogAPI("  esi %-8x  ", ExceptionInfo->ContextRecord->Esi);
-		LogAPI("edi %-8x  ", ExceptionInfo->ContextRecord->Edi);
-		LogAPI("ebp %-8x  ", ExceptionInfo->ContextRecord->Ebp);
-		LogAPI("esp %-8x  \r\n\r\n", ExceptionInfo->ContextRecord->Esp);
-			
+		#ifdef _M_IX86
+			LogAPI("  eax %-8x  ", ExceptionInfo->ContextRecord->Eax);
+			LogAPI("ebx %-8x  ", ExceptionInfo->ContextRecord->Ebx);
+			LogAPI("ecx %-8x  ", ExceptionInfo->ContextRecord->Ecx);
+			LogAPI("edx %-8x  \r\n", ExceptionInfo->ContextRecord->Edx);
+			LogAPI("  esi %-8x  ", ExceptionInfo->ContextRecord->Esi);
+			LogAPI("edi %-8x  ", ExceptionInfo->ContextRecord->Edi);
+			LogAPI("ebp %-8x  ", ExceptionInfo->ContextRecord->Ebp);
+			LogAPI("esp %-8x  \r\n\r\n", ExceptionInfo->ContextRecord->Esp);
+		#else
+			LogAPI("  rax %-8x  ", ExceptionInfo->ContextRecord->Rax);
+			LogAPI("rbx %-8x  ", ExceptionInfo->ContextRecord->Rbx);
+			LogAPI("rcx %-8x  ", ExceptionInfo->ContextRecord->Rcx);
+			LogAPI("rdx %-8x  \r\n", ExceptionInfo->ContextRecord->Rdx);
+			LogAPI("  rsi %-8x  ", ExceptionInfo->ContextRecord->Rsi);
+			LogAPI("rdi %-8x  ", ExceptionInfo->ContextRecord->Rdi);
+			LogAPI("rbp %-8x  ", ExceptionInfo->ContextRecord->Rbp);
+			LogAPI("rsp %-8x  \r\n\r\n", ExceptionInfo->ContextRecord->Rsp);
+		#endif
+
 		int inst=1;
 		while(inst < 5){
 			a+=retLen;
@@ -1295,6 +1314,9 @@ void main(int argc, char **argv){
 	GAlloc.offset = 0;
 	VAlloc.size   = 0;
 	GAlloc.size   = 0;
+
+	if( IsDebuggerPresent() ) debug = 1;
+	debugMsgHandler = HE_DebugHandler;
 
 	system("cls");
 	//system("mode con lines=45");
@@ -1467,7 +1489,7 @@ void main(int argc, char **argv){
 	atexit(myAtExit); //for GAlloc and VAlloc mem dumping if we have to.
 
 	//buf = (char*)malloc(bufsz);
-	buf = (char*)VirtualAlloc((void*)0x11110000 , bufsz, MEM_RESERVE | MEM_COMMIT , 0x40);
+	buf = (char*)VirtualAlloc((void*)0x11000000 , bufsz, MEM_RESERVE | MEM_COMMIT , 0x40);
 	if(buf == 0){
 		printf("VirtualAlloc failed..aborting run\n");
 		exit(0);
@@ -1557,8 +1579,8 @@ void DoHook(void* real, void* hook, int* thunk, char* name){
 		}
 
 		if(!worked){
-			infomsg("Install %s hook failed...\r\nError: %s\r\n", name, GetHookError());
-			if( Real_ExitProcess == NULL ) ExitProcess(0); else Real_ExitProcess(0);
+			if(debug) infomsg("Install %s hook failed...\r\nError: %s\r\n", name, GetHookError());
+			//if( Real_ExitProcess == NULL ) ExitProcess(0); else Real_ExitProcess(0);
 		}
 
 	}
@@ -1573,7 +1595,7 @@ void InstallHooks(void)
 {
  
 	hKernelBase = GetModuleHandle("kernelbase.dll");
-
+   
 	ADDHOOK(LoadLibraryA); 
 	ADDHOOK(WriteFile);
 	ADDHOOK(CreateFileA);

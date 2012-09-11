@@ -15,7 +15,7 @@ enum hookErrors{ he_None=0, he_cantDisasm, he_cantHook, he_maxHooks, he_UnknownH
 extern hookErrors lastErrorCode;
 
 //extern void InitHookEngine(void); handled automatically now...
-
+extern void  (__cdecl *debugMsgHandler)(char* msg);
 extern char* __cdecl GetHookError(void);
 extern char* __cdecl GetDisasm(ULONG_PTR pAddress, int* retLen = NULL);
 extern void __cdecl DisableHook(ULONG_PTR Function);

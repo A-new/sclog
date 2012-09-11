@@ -19,6 +19,9 @@
 //Mods by David Zimmer <dzzie@yahoo.com>
 
 
+//note: in several places we work on HookInfo[NumberOfHooks] as a global object in sub fx..
+
+
 // 10000 hooks should be enough
 #define MAX_HOOKS 10000
 #define JUMP_WORST		0x10		// Worst case scenario + line all up on 0x10 boundary...
@@ -35,6 +38,7 @@ enum hookErrors{ he_None=0, he_cantDisasm, he_cantHook, he_maxHooks, he_UnknownH
 bool initilized = false;
 char lastError[500] = {0};
 hookErrors lastErrorCode = he_None;
+void  (__cdecl *debugMsgHandler)(char* msg);
 
 typedef struct _HOOK_INFO
 {
@@ -44,6 +48,8 @@ typedef struct _HOOK_INFO
 	hookType hooktype;
 	char* ApiName;
 	bool Enabled;
+	int preAlignBytes;
+	int index;
 
 } HOOK_INFO, *PHOOK_INFO;
 
@@ -60,10 +66,27 @@ char* __cdecl GetHookError(void){
 stdc
 void __cdecl InitHookEngine(void){
 	if(initilized) return;
+	initilized = true;
 	UINT sz = MAX_HOOKS * (JUMP_WORST * 3);
 	pBridgeBuffer = (BYTE *) VirtualAlloc(NULL, sz, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 	memset(pBridgeBuffer, 0 , sz);
 	memset(&HookInfo[0], 0, sizeof(struct _HOOK_INFO) * MAX_HOOKS);
+}
+
+void dbgmsg(const char *format, ...)
+{
+	char buf[1024];
+
+	if(debugMsgHandler!=NULL && format!=NULL){
+		va_list args; 
+		va_start(args,format); 
+		try{
+			_vsnprintf(buf,1024,format,args);
+			(*debugMsgHandler)(buf);
+		}
+		catch(...){}
+	}
+
 }
 
 HOOK_INFO *GetHookInfoFromFunction(ULONG_PTR OriginalFunction)
@@ -86,9 +109,9 @@ HOOK_INFO *GetHookInfoFromFunction(ULONG_PTR OriginalFunction)
 	void __stdcall output(ULONG_PTR ra){
 		HOOK_INFO *hi = GetHookInfoFromFunction(ra);
 		if(hi){
-			printf("jmp %s+5 api detected trying to recover...\n", hi->ApiName );
+			dbgmsg("jmp %s+5 api detected trying to recover...\n", hi->ApiName );
 		}else{
-			printf("jmp+5 api caught %x\n", ra );
+			dbgmsg("jmp+5 api caught %x\n", ra );
 		}
 	}
 
@@ -180,7 +203,7 @@ char* __cdecl GetDisasm(ULONG_PTR pAddress, int* retLen = NULL){ //just a helper
 
 
 
-bool UnSupportedOpcode(BYTE *b){ //primary instruction opcodes are the same for x64 and x86 
+bool UnSupportedOpcode(BYTE *b, int hookIndex){ //primary instruction opcodes are the same for x64 and x86 
 
 	BYTE bb = *b;
 	
@@ -191,7 +214,7 @@ bool UnSupportedOpcode(BYTE *b){ //primary instruction opcodes are the same for 
 		case 0xE8:
 		case 0xE9:
 		case 0x0F:
-		case 0xFF:
+		//case 0xFF:
 		case 0xc3: 
 		case 0xc4: 
 			        goto failed;
@@ -201,18 +224,19 @@ bool UnSupportedOpcode(BYTE *b){ //primary instruction opcodes are the same for 
 
 
 failed:
-		UINT offset = (UINT)b - HookInfo[NumberOfHooks].Function;
+		UINT offset = (UINT)b - HookInfo[hookIndex].Function;
 		char* d = GetDisasm((ULONG_PTR)b);
 
 		if(d == NULL){
-			sprintf(lastError,"Unsupported opcode at %s+%d: Opcode: %x", HookInfo[NumberOfHooks].ApiName, offset, *b);
+			sprintf(lastError,"Unsupported opcode at %s+%d: Opcode: %x", HookInfo[hookIndex].ApiName, offset, *b);
 			lastErrorCode = he_cantHook;
 		}else{
-			sprintf(lastError,"Unsupported opcode at %s+%d\n%s", HookInfo[NumberOfHooks].ApiName, offset, d);
+			sprintf(lastError,"Unsupported opcode at %s+%d\n%s", HookInfo[hookIndex].ApiName, offset, d);
 			lastErrorCode = he_cantHook;
 			free(d);
 		}
-		
+
+		//dbgmsg(lastError);
 		return true;
 
 }
@@ -222,21 +246,41 @@ void WriteInt( BYTE *pAddress, UINT value){
 	*(UINT*)pAddress = value;
 }
 
-//
-// This function writes unconditional jumps
-// both for x86 and x64
-//
-VOID WriteJump(VOID *pAddress, ULONG_PTR JumpTo, hookType ht)
+// A relative jump (opcode 0xE9) treats its operand as a 32 bit signed offset. If the unsigned
+// distance between from and to is of sufficient magnitude that it cannot be represented as a 
+// signed 32 bit integer, then we'll have to use an absolute jump instead (0xFF 0x25).
+//https://bitbucket.org/edd/nanohook/src/da62bc7232e6/src/hook.cpp
+/*bool abs_jump_required(const unsigned char *from, const unsigned char *to)
 {
+    const uintptr_t upper = bit_for_bit_cast<uintptr_t>(std::max(from, to));
+    const uintptr_t lower = bit_for_bit_cast<uintptr_t>(std::min(from, to));
+
+    return upper - lower > 0x7FFFFFFF;
+}*/
+
+
+VOID WriteJump(VOID *pAddress, ULONG_PTR JumpTo,hookType ht, int hookIndex = -1)
+{
+	
+    int preAmbleSz = 0;
+	if(hookIndex>=0){
+		//todo experiment with emdedding [xx] address in preamble
+		preAmbleSz = HookInfo[hookIndex].preAlignBytes; 
+	}
+
 	DWORD dwOldProtect = 0;
 	VirtualProtect(pAddress, JUMP_WORST, PAGE_EXECUTE_READWRITE, &dwOldProtect);
 	BYTE *pCur = (BYTE *) pAddress;
 
 #ifdef _M_IX86
         
+	   /*if(ht == ht_jmp || ht == ht_jmp5safe){
+			todo: if abs_jump_required() fail or change type...
+	   }*/
+
 	   if(ht == ht_pushret){
-		   //68 DDCCBBAA      PUSH AABBCCDD (6 bytes)
-		   //C3               RETN
+		   //68 DDCCBBAA      PUSH AABBCCDD (6 bytes) - hook detectors wont see it, 
+		   //C3               RETN                      jmp+5 = crash (good no exec, bad crash..)
 		   *pCur = 0x68;
 		   *((ULONG_PTR *)++pCur) = JumpTo;
 		   pCur+=4;
@@ -244,21 +288,21 @@ VOID WriteJump(VOID *pAddress, ULONG_PTR JumpTo, hookType ht)
 	   }
 	   else if(ht == ht_jmpderef){	  
 			//eip>  FF25 AABBCCDD    JMP DWORD PTR DS:[eip+6] 10 bytes
-			//eip+6 xxxxxxxx
-			*pCur = 0xff;    
+			//eip+6 xxxxxxxx         data after instruction, other hookers will bad disasm, and large footprint
+			*pCur = 0xff;            //if we can use the preALignBytes footprint down to 6...
 			*(pCur+1) = 0x25;
 			WriteInt(pCur+2, (int)pCur + 6);
 			WriteInt(pCur+6, JumpTo);
 	   }
 	   else if(ht== ht_jmp){
 			//E9 jmp (DESTINATION_RVA - CURRENT_RVA - 5 [sizeof(E9 xx xx xx xx)]) (5 bytes)
-		    UINT dst = JumpTo - (UINT)(pAddress) - 5;
+		    UINT dst = JumpTo - (UINT)(pAddress) - 5;  //2gb address limitation
 			*pCur = 0xE9;
 			WriteInt(pCur+1, dst);
 	   }
 	   else if(ht = ht_jmp5safe){ //this needs a second trampoline if api+5 jmp is hit, it needs to reverse the push ebp to send to hook..
 			//E9 jmp normal prolog + eB call to UnwindProlog  (10 bytes)
-		    *(pCur) = 0xE9;
+		    *(pCur) = 0xE9;                        //fancy and cool but big footprint and complex..
 			UINT dst = JumpTo - (UINT)(pCur) - 5; 
 			WriteInt(pCur+1, dst);			
 			*(pCur+5) = 0xE8;
@@ -268,16 +312,35 @@ VOID WriteJump(VOID *pAddress, ULONG_PTR JumpTo, hookType ht)
 	   else{
 		   sprintf(lastError, "Unimplemented hook type asked for");
 		   lastErrorCode = he_UnknownHookType;
+		   //dbgmsg(lastError);
 		   ExitProcess(0);
 	   }
 
 #else ifdef _M_AMD64
 
-		*pCur = 0xff;		// jmp [rip+addr]
+		*pCur = 0xff;		// jmp [rip+addr] (14 bytes?)
 		*(++pCur) = 0x25;
 		*((DWORD *) ++pCur) = 0; // addr = 0
 		pCur += sizeof (DWORD);
 		*((ULONG_PTR *)pCur) = JumpTo;
+
+		/*
+		how about ff25 [4byte address of alloced table entry].. 
+		should be down to 6 bytes inline?
+		if you can stay in the 2gb range i think..
+
+		mov rax, 0x4142434445464748 (12 bytes)
+		jmp rax
+		0000000: 48b8 4847 4645 4443 4241 ffe0
+		RtlCopyMemory(Hook->OldProc + RelocSize, Jumper_x64, 12);
+		RtlCopyMemory(Hook->OldProc + RelocSize + 2, &RelAddr, 8);
+		Jumper_x64[12] = {0x48, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xe0};
+
+		push rax
+		mov rax,1234567890ABCDEFh
+		xchg rax,[rsp] //preserve RAX, (13 bytes)
+		ret
+		*/
 
 #endif
 
@@ -285,10 +348,18 @@ VOID WriteJump(VOID *pAddress, ULONG_PTR JumpTo, hookType ht)
 	VirtualProtect(pAddress, JUMP_WORST, dwOldProtect, &dwBuf);
 }
 
+//is there any padding before the function start to emded data? many x86 have 5 bytes..
+int CountPreAlignBytes(BYTE* pAddress){ 
+	
+	int x;
+	for(x=0; x<=9; x++ ){
+		BYTE b = *(BYTE*)(pAddress-x-1);
+		if(b==0x90 || b==0xCC) ; else break;
+	}
+	if(x>0) dbgmsg("%s has %d pre align bytes available...\n", HookInfo[NumberOfHooks].ApiName, x);
+	return x;
+}
 
-//
-// This function creates a bridge of the original function
-//
 
 VOID *CreateBridge(ULONG_PTR Function, const UINT JumpSize)
 {
@@ -320,6 +391,7 @@ VOID *CreateBridge(ULONG_PTR Function, const UINT JumpSize)
 
 	if (res == DECRES_INPUTERR){
 		sprintf(lastError, "Could not disassemble address %x", (UINT)Function);
+		//dbgmsg(lastError);
 		lastErrorCode = he_cantDisasm;
 		return NULL;
 	}
@@ -332,7 +404,7 @@ VOID *CreateBridge(ULONG_PTR Function, const UINT JumpSize)
 		if (InstrSize >= JumpSize) break;
 
 		BYTE *pCurInstr = (BYTE *) (InstrSize + (ULONG_PTR) Function);
-		if(UnSupportedOpcode(pCurInstr)) return NULL;
+		if(UnSupportedOpcode(pCurInstr, NumberOfHooks)) return NULL;
 		
 		memcpy(&pBridgeBuffer[CurrentBridgeBufferSize], (VOID *) pCurInstr, decodedInstructions[x].size);
 
@@ -362,13 +434,16 @@ BOOL __cdecl HookFunction(ULONG_PTR OriginalFunction, ULONG_PTR NewFunction, cha
 	if (NumberOfHooks == (MAX_HOOKS - 1)){
 		lastErrorCode = he_maxHooks;
 		strcpy(lastError,"Maximum number of hooks reached.");
+		dbgmsg(lastError);
 		return FALSE;
 	}
 
 	HookInfo[NumberOfHooks].Function = OriginalFunction;
 	HookInfo[NumberOfHooks].Hook = NewFunction;
     HookInfo[NumberOfHooks].hooktype = ht;
+	HookInfo[NumberOfHooks].index = NumberOfHooks;
 	HookInfo[NumberOfHooks].ApiName = strdup(name);
+	//HookInfo[NumberOfHooks].preAlignBytes = CountPreAlignBytes( (BYTE*)OriginalFunction );
 
 	VOID *pBridge = CreateBridge(OriginalFunction, GetJumpSize(ht) );
 

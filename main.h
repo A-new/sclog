@@ -92,6 +92,8 @@ enum AntiSpamFx{
 	asWriteFile = 1,
 };
 
+#define	SCOffset() (int)_ReturnAddress()
+
 bool AntiSpamSupress[50]; 
 
 void SetSupress(AntiSpamFx api){
@@ -190,14 +192,14 @@ void msg(char* msg, int color = -1, int logit=1){ //safe hook free console outpu
 	DWORD cbWritten=0;
 	
 	if(msg==NULL) return;
-	if(Real_WriteFile == NULL) return;
 
 	if(color) SetConsoleTextAttribute(STDOUT,  color);
-	Real_WriteFile( STDOUT , msg , strlen(msg), &cbWritten, NULL);
+	printf("%s",msg);
 	if(color) SetConsoleTextAttribute(STDOUT,  0x7); //back to default gray
 
 	if(logit==1 && logFile!=NULL){
-		Real_WriteFile( logFile , msg , strlen(msg), &cbWritten, NULL);
+		if(Real_WriteFile == NULL) WriteFile( logFile , msg , strlen(msg), &cbWritten, NULL);
+		  else Real_WriteFile( logFile , msg , strlen(msg), &cbWritten, NULL);
 		FlushFileBuffers(logFile);
 	}
 
@@ -412,14 +414,13 @@ void LogAPI(const char *format, ...)
 
 
 
-#if defined _M_X64 
+/*#if defined _M_X64 
 	//ContextRecord.Eip = (ULONG)_ReturnAddress();
     //ContextRecord.Esp = (ULONG)_AddressOfReturnAddress();
     //ContextRecord.Ebp = *((ULONG *)_AddressOfReturnAddress()-1);
 
 	//#define	SCOffset() (int)_AddressOfReturnAddress()
-      #define	SCOffset() (int)_ReturnAddress()
-
+      
 	/*inline int SCOffset(){
 		//dotn use RTLCaptureContext...
 		//requires at least XP, make sure to turn optimizations off for release,still crashs on x64
@@ -429,7 +430,7 @@ void LogAPI(const char *format, ...)
 		int rv = (int)_AddressOfReturnAddress();
 		printf("ret=%x\n",rv);
 		return rv;
-	}*/
+	}* /
 #else
 	__declspec(naked) int SCOffset(){ //has to be called from parent hook function to mean anything...
 		_asm{
@@ -437,15 +438,16 @@ void LogAPI(const char *format, ...)
 				 ret
 		}
 	}
-#endif
+#endif*/
 
-int calledFromSC(){
+inline int calledFromSC(int offset){
+
+	//return 1;
 
 	if(nofilt==1) return 1;
 
-	int x = SCOffset();
-	if( x < (int)&buf) return 0;
-	if( (x > (((int)&buf) + bufsz)) ) return 0;
+	if( offset < (int)buf) return 0;
+	if( (offset > (((int)buf) + bufsz)) ) return 0;
 	return 1;
 
 }
