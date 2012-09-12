@@ -10,9 +10,10 @@
 //
 //Mods by David Zimmer <dzzie@yahoo.com>
 
-enum hookType{ ht_jmp = 0, ht_pushret=1, ht_jmp5safe=2, ht_jmpderef=3 };
+enum hookType{ ht_jmp = 0, ht_pushret=1, ht_jmp5safe=2, ht_jmpderef=3, ht_micro };
 enum hookErrors{ he_None=0, he_cantDisasm, he_cantHook, he_maxHooks, he_UnknownHookType  };
 extern hookErrors lastErrorCode;
+extern int logLevel;
 
 //extern void InitHookEngine(void); handled automatically now...
 extern void  (__cdecl *debugMsgHandler)(char* msg);

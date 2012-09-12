@@ -1315,9 +1315,9 @@ void main(int argc, char **argv){
 	VAlloc.size   = 0;
 	GAlloc.size   = 0;
 
-	if( IsDebuggerPresent() ) debug = 1;
+	if( IsDebuggerPresent() ){ debug=1; logLevel=0;};
 	debugMsgHandler = HE_DebugHandler;
-
+	
 	system("cls");
 	//system("mode con lines=45");
 	printf("\r\n");
@@ -1538,6 +1538,7 @@ void main(int argc, char **argv){
 	(int)(*sc)();
 
 	//we wont ever get down here..
+	exit(0);
 
 }
 
@@ -1579,7 +1580,7 @@ void DoHook(void* real, void* hook, int* thunk, char* name){
 		}
 
 		if(!worked){
-			if(debug) infomsg("Install %s hook failed...\r\nError: %s\r\n", name, GetHookError());
+			/*if(debug)*/ infomsg("Install %s hook failed...\r\nError: %s\r\n", name, GetHookError());
 			//if( Real_ExitProcess == NULL ) ExitProcess(0); else Real_ExitProcess(0);
 		}
 
