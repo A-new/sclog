@@ -327,13 +327,14 @@ bool WriteJump(VOID *pAddress, ULONG_PTR JumpTo, hookType ht, int hookIndex)
 	   else{
 		   sprintf(lastError, "Unimplemented hook type asked for");
 		   lastErrorCode = he_UnknownHookType;
-		   //dbgmsg(lastError);
-		   ExitProcess(0);
+		   return false;
 	   }
 
 #else ifdef _M_AMD64
 
-		*pCur = 0xff;		// jmp [rip+addr] (14 bytes?)
+		//ff 25 00 00 00 00        jmp [rip+addr] (14 bytes)
+	    //80 70 8e 77 00 00 00 00  data: 00000000778E7080
+		*pCur = 0xff;		 
 		*(++pCur) = 0x25;
 		*((DWORD *) ++pCur) = 0; // addr = 0
 		pCur += sizeof (DWORD);
@@ -344,12 +345,8 @@ bool WriteJump(VOID *pAddress, ULONG_PTR JumpTo, hookType ht, int hookIndex)
 		should be down to 6 bytes inline?
 		if you can stay in the 2gb range i think..
 
-		mov rax, 0x4142434445464748 (12 bytes)
-		jmp rax
-		0000000: 48b8 4847 4645 4443 4241 ffe0
-		RtlCopyMemory(Hook->OldProc + RelocSize, Jumper_x64, 12);
-		RtlCopyMemory(Hook->OldProc + RelocSize + 2, &RelAddr, 8);
-		Jumper_x64[12] = {0x48, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xe0};
+		48 b8 80 70 8e 77 00 00 00 00   mov rax, 0x00000000778E7080 (12 bytes)
+		ff e0                           jmp rax
 
 		(16 bytes preserves rax)
 		50                             push rax

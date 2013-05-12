@@ -97,7 +97,7 @@ ChangeLog:
 HANDLE STDOUT;
 HANDLE STDIN;
 
-DWORD bufsz=0;  //these are global so we can check to see if execution comes from 
+unsigned int bufsz=0;  //these are global so we can check to see if execution comes from 
 char *buf;      //   this vincinity for logging ret address
 
 int redirect=0; //cmdline option to change connect ips to 127.0.0.1
@@ -130,6 +130,16 @@ void InstallHooks(void);
 
 void __cdecl HE_DebugHandler(char* msg){
 	infomsg("     %s", msg);
+}
+
+enum colors{ mwhite=15, mgreen=10, mred=12, myellow=14, mblue=9, mpurple=5, mgrey=7, mdkgrey=8 };
+
+void end_color(void){
+	SetConsoleTextAttribute(STDOUT,7); 
+}
+
+void start_color(enum colors c){
+    SetConsoleTextAttribute(STDOUT, c);
 }
 
 //___________________________________________________hook implementations _________
@@ -1299,6 +1309,120 @@ LONG __stdcall exceptFilter(struct _EXCEPTION_POINTERS* ExceptionInfo){
 
 }
 
+void byteSwap(unsigned char* buf, unsigned int sz, char* id){
+	
+	printf("Byte Swapping %s input buffer..\n", id);
+	unsigned char a,b;
+	for(int i=0; i < sz-1; i+=2){
+		a = buf[i];
+        b = buf[i+1];
+        buf[i] = b;
+		buf[i+1] = a;
+	}
+
+}
+
+char* strlower2(char* input){
+	char* alwaysWritable = (char*)malloc(strlen(input)+1);
+	char* p = alwaysWritable;
+	strcpy(alwaysWritable, input);
+	while(*p){*p = tolower(*p);p++;}
+	return alwaysWritable;
+}
+
+unsigned int stripChars(unsigned char* buf_in, int *output, unsigned int sz, char* chars){
+	unsigned int out=0;
+	int copy,c;
+	unsigned char d;
+	unsigned char* buf_out = (unsigned char*)malloc(sz);
+	for(int i=0; i<sz; i++){
+		copy = 1;
+		c = 0;
+		d = (unsigned char)buf_in[i];
+		while(chars[c] != 0){
+			if(d==chars[c]){ copy=0; break; } 
+			c++;
+		}
+		if(copy) (unsigned char)buf_out[out++] = d;
+	}
+	
+	*output = (int)buf_out;
+	return out;
+}
+
+int HexToBin(char* input, int* output){
+
+	int sl =  strlen(input) / 2;
+	void *buf = malloc(sl+10);
+    memset(buf,0,sl+10);
+
+	char *lower = strlower2(input);
+	char *h = lower; /* this will walk through the hex string */
+	unsigned char *b = (unsigned char*)buf; /* point inside the buffer */
+
+	/* offset into this string is the numeric value */
+	char xlate[] = "0123456789abcdef";
+
+	for ( ; *h; h += 2, ++b) /* go by twos through the hex string */
+	   *b = ((strchr(xlate, *h) - xlate) * 16) /* multiply leading digit by 16 */
+		   + ((strchr(xlate, *(h+1)) - xlate));
+
+	free(lower);
+	*output = (int)buf;
+	return sl;
+		
+}
+
+
+
+
+
+unsigned char* load_sc(HANDLE h, unsigned int* size){
+
+	DWORD l=0;
+	unsigned char* scode = (unsigned char*)malloc(*size);
+	ReadFile(h, scode, *size,&l,0);
+
+	int tmp;
+	int tmp2;
+    int j=0;
+
+	for(j=0; j < *size; j++){ //scan the buffer and ignore possible white space and quotes...
+		unsigned char jj = scode[j];
+		if(jj != ' ' && jj != '\r' && jj != '\n' && jj != '"' && jj != '\t' && jj != '\'') break;
+	}
+	if(j >= *size-1) j = 0;
+
+	if(scode[j] == '%' && scode[j+1] == 'u'){
+		start_color(colors::myellow);
+		printf("Detected %%u encoding input format converting...\n");
+		end_color();
+		*size = stripChars((unsigned char*)scode, &tmp, *size, "\n\r\t,%u\";\' "); 
+		free(scode);
+		*size = HexToBin((char*)tmp, &tmp2);
+		scode = (unsigned char*)tmp2;
+		byteSwap(scode, *size, "%u encoded"); 
+	}else if(scode[j] == '%' && scode[j+3] == '%'){
+		start_color(colors::myellow);
+		printf("Detected %% hex input format converting...\n");
+		end_color();
+		*size = stripChars((unsigned char*)scode, &tmp, *size, "\n\r\t,%\";\' "); 
+		free(scode);
+		*size = HexToBin((char*)tmp, &tmp2);
+		scode = (unsigned char*)tmp2;		
+	}else if(scode[j] == '\\' && scode[j+1] == 'x'){
+		start_color(colors::myellow);
+		printf("Detected \\x encoding input format converting...\n");
+		end_color();
+		*size = stripChars((unsigned char*)scode, &tmp, *size,"\n\r\t,\\x\";\' " ); 
+		free(scode);
+		*size = HexToBin((char*)tmp, &tmp2);
+		scode = (unsigned char*)tmp2;
+	}
+
+	return scode;
+
+}
 
 void main(int argc, char **argv){
 	
@@ -1481,6 +1605,8 @@ void main(int argc, char **argv){
 		return;
 	}
 
+	unsigned char* tmpBuf = load_sc(h, &bufsz);
+
 	if(addbpx){
 		printf("Adding Breakpoint to beginning of shellcode buffer\r\n");
 		bufsz++;
@@ -1503,9 +1629,9 @@ void main(int argc, char **argv){
 
 	if(addbpx){
 		buf[0]= (unsigned char)0xCC;
-		ReadFile(h, &buf[1]  , (bufsz-1) ,&l,0);
+		memcpy(&buf[1],tmpBuf, bufsz-1);
 	}else{
-		ReadFile(h, buf  , bufsz ,&l,0);
+		memcpy(buf,tmpBuf, bufsz);
 	}
 
 	CloseHandle(h);

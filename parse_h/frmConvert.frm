@@ -52,8 +52,8 @@ Private Sub Command1_Click()
         'FARPROC  (__stdcall *Real_GetProcAddress)(HMODULE a0,LPCSTR a1);
         If InStr(y, "ALLOC_") > 0 Then
             y = Replace(Trim(y), "ALLOC_THUNK(", Empty)
-            y = Replace(Trim(y), "));", ");")
-             y = Replace(Trim(y), ") );", ");")
+            y = Replace(Trim(y), ") );", "));")
+            y = Replace(Trim(y), "));", ") = NULL;")
             y = Replace(Trim(y), "(", ")(")
             y = Replace(Trim(y), "__stdcall ", "(__stdcall *")
             
