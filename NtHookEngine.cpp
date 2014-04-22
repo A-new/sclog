@@ -33,7 +33,7 @@
 #endif
 
 enum hookType{ ht_jmp = 0, ht_pushret=1, ht_jmp5safe=2, ht_jmpderef=3, ht_micro };
-enum hookErrors{ he_None=0, he_cantDisasm, he_cantHook, he_maxHooks, he_UnknownHookType  };
+enum hookErrors{ he_None=0, he_cantDisasm, he_cantHook, he_maxHooks, he_UnknownHookType, he_Other  };
 
 int  logLevel=0;
 bool initilized = false;
@@ -51,7 +51,8 @@ typedef struct _HOOK_INFO
 	bool Enabled;
 	int preAlignBytes;
 	int index;
-
+	int size;
+	int removed;
 } HOOK_INFO, *PHOOK_INFO;
 
 HOOK_INFO HookInfo[MAX_HOOKS];
@@ -377,7 +378,7 @@ int CountPreAlignBytes(BYTE* pAddress){
 }
 
 
-VOID *CreateBridge(ULONG_PTR Function, const UINT JumpSize, int hookIndex)
+VOID *CreateBridge(ULONG_PTR Function, const UINT JumpSize, int hookIndex, int* hookSz)
 {
 	if (pBridgeBuffer == NULL) return NULL;
 
@@ -428,6 +429,8 @@ VOID *CreateBridge(ULONG_PTR Function, const UINT JumpSize, int hookIndex)
 		InstrSize += decodedInstructions[x].size;
 	}
 
+	*hookSz = InstrSize; //so we know how many bytes we overwrote in prolog for removal 
+
 	//to leave trampoline...
 	bool rv = WriteJump(&pBridgeBuffer[CurrentBridgeBufferSize], Function + InstrSize, ht_jmp, hookIndex);
 	CurrentBridgeBufferSize += JumpSize+5; //+sizeof(ht_jmp)-------------------^
@@ -473,7 +476,8 @@ BOOL __cdecl HookFunction(ULONG_PTR OriginalFunction, ULONG_PTR NewFunction, cha
 		}
 	}	
 
-	VOID *pBridge = CreateBridge(OriginalFunction, GetJumpSize(ht), NumberOfHooks );
+	int hookSz = 0;
+	VOID *pBridge = CreateBridge(OriginalFunction, GetJumpSize(ht), NumberOfHooks, &hookSz );
 
 	if (pBridge == NULL){
 		free(HookInfo[NumberOfHooks].ApiName);
@@ -483,41 +487,107 @@ BOOL __cdecl HookFunction(ULONG_PTR OriginalFunction, ULONG_PTR NewFunction, cha
 
 	HookInfo[NumberOfHooks].Bridge = (ULONG_PTR) pBridge;
 	HookInfo[NumberOfHooks].Enabled = true;
+	HookInfo[NumberOfHooks].size = hookSz;
 
 	if(!WriteJump((VOID *) OriginalFunction, NewFunction, ht, NumberOfHooks)){ //activates hook in api prolog..
 		return FALSE;
 	}
 
+	dbgmsg(1, "Hook for %s -> %x", name, pBridge);
+
 	NumberOfHooks++; //now we commit it as complete..
 	return TRUE;
 }
-
-stdc  
-VOID __cdecl DisableHook(ULONG_PTR Function)
+ 
+stdc
+int __cdecl DisableHook(ULONG_PTR Function)
 {
 	HOOK_INFO *hinfo = GetHookInfoFromFunction(Function);
-	if (hinfo)
-	{
-		if(hinfo->Enabled){
-			hinfo->Enabled = false;
-			WriteJump((VOID *)hinfo->Function, hinfo->Bridge, ht_jmp, hinfo->index);
-		}
+	if (!hinfo) return 0;
+	 
+	if(hinfo->removed==1) return 0;
+
+	if(hinfo->Enabled){
+		hinfo->Enabled = false;
+		WriteJump((VOID *)hinfo->Function, hinfo->Bridge, ht_jmp, hinfo->index);
+		return 1;
 	}
+	 
+	return 0;
 
 }
 
-stdc 
-VOID __cdecl EnableHook(ULONG_PTR Function)
+stdc
+int __cdecl EnableHook(ULONG_PTR Function)
 {
 	HOOK_INFO *hinfo = GetHookInfoFromFunction(Function);
 	if (hinfo)
 	{
+		if(hinfo->removed==1) return 0;
+
 		if(!hinfo->Enabled){
 			hinfo->Enabled = true;
 			WriteJump((VOID *)hinfo->Function, hinfo->Hook, hinfo->hooktype, hinfo->index );
+			return 1;
 		}
 	}
+
+	return 0;
 }
+
+stdc
+int __cdecl RemoveHook(ULONG_PTR Function) //no going back from this..disable if you want to use it latter..
+{
+	HOOK_INFO *hinfo = GetHookInfoFromFunction(Function);
+	if (hinfo)
+	{
+		if(hinfo->removed==1) return 0;
+
+		DWORD dwOldProtect = 0;
+		VirtualProtect((void*) hinfo->Function, hinfo->size, PAGE_EXECUTE_READWRITE, &dwOldProtect);
+		
+		memcpy((void*)hinfo->Function,(void*) hinfo->Bridge, hinfo->size);
+		hinfo->removed = 1;
+
+		if( hinfo->ApiName != 0 ){
+			dbgmsg(1, "Removed hook for %s", hinfo->ApiName);
+			free(hinfo->ApiName);
+		}
+
+		DWORD dwBuf = 0;	// nessary othewrise the function fails
+		VirtualProtect((void*)hinfo->Function, hinfo->size, dwOldProtect, &dwBuf);
+
+		//might be nice to be tidy and 0xCC out bridge..
+		return 1;
+	}
+
+	return 0;
+}
+
+stdc
+void __cdecl RemoveAllHooks(void){
+
+	for(int i=0; i <= NumberOfHooks; i++){
+		if(HookInfo[MAX_HOOKS].Function !=0){
+			if( HookInfo[MAX_HOOKS].removed == 0 ) RemoveHook(HookInfo[MAX_HOOKS].Function);
+		}
+	}
+
+}
+
+stdc
+void __cdecl UnInitilize(void)
+{
+	if(!initilized) return;
+	RemoveAllHooks();
+	VirtualFree(pBridgeBuffer,0,MEM_RELEASE);
+	memset(&HookInfo[0], 0, sizeof(struct _HOOK_INFO) * MAX_HOOKS);
+	pBridgeBuffer = 0;
+	initilized = false;
+	NumberOfHooks = 0;
+	CurrentBridgeBufferSize = 0;
+}
+
 
 stdc
 ULONG_PTR __cdecl GetOriginalFunction(ULONG_PTR Hook)
